@@ -34,7 +34,6 @@
     .good { color: var(--good); }
     .warn { color: var(--warn); }
 
-    .summary-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
     .pill { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; border:1px solid #334155; background:#0b1220; font-size:12px; }
 
     table { width:100%; border-collapse: collapse; overflow: auto; }
@@ -48,11 +47,16 @@
 
     details { border:1px solid #253144; border-radius: 12px; padding: 10px 12px; background:#0b1220; }
     details summary { cursor: pointer; user-select: none; }
+
+    .grid-2 { display:grid; grid-template-columns: 1fr; gap:12px; }
+    @media (min-width: 840px){ .grid-2 { grid-template-columns: 1fr 1fr; } }
+
+    select.btn { padding-right:28px; }
   </style>
 </head>
 <body>
   <header>
-    <h1>CSV差分チェッカー（順不同一致・部分一致・ドラッグ＆ドロップ対応）</h1>
+    <h1>CSV差分チェッカー（順不同一致・部分的検査・カラム対応・ドラッグ＆ドロップ対応）</h1>
   </header>
   <main>
     <div class="row">
@@ -96,6 +100,28 @@
       </div>
     </section>
 
+    <!-- 4) 部分的な検査（キーカラム突合 & 比較カラム対応） -->
+    <section class="card" id="partialCard" style="margin-top:16px; display:none">
+      <h3 style="margin-top:0">4) 部分的な検査（例：index と votes/raw_votes の一致）</h3>
+      <p class="muted" style="margin-top:0">
+        先頭のファイルを<b>基準</b>として、同じキー（例：<code>index</code>）で行を突合し、選択した「比較カラム」（例：<code>raw_votes</code> と <code>votes</code>）の値が一致しているか検査します。<br>
+        ヘッダー行（1行目）が必要です。※「ヘッダー除外」をONにしていると使えません。
+      </p>
+      <div id="partialConfig" class="grid-2"></div>
+      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+        <label class="control" style="margin:0">
+          <input type="checkbox" id="partialTrim" checked>
+          <span>比較時に前後空白をトリム</span>
+        </label>
+        <label class="control" style="margin:0">
+          <input type="checkbox" id="partialStrict" checked>
+          <span>厳密一致（文字列完全一致）</span>
+        </label>
+        <button id="runPartialBtn" class="btn">部分的検査を実行</button>
+      </div>
+      <div id="partialResult" style="margin-top:12px" class="muted">設定後に「部分的検査を実行」を押してください。</div>
+    </section>
+
     <section class="card" style="margin-top:16px">
       <h3 style="margin-top:0">詳細（不一致行 一覧）</h3>
       <div id="detailsWrap" class="muted">不一致がある場合、この下に <b>行そのもの</b> と <b>各ファイルでの出現回数</b> を一覧表示します。</div>
@@ -109,6 +135,7 @@
           <li>「重複行の個数も比較」をONの場合、多重集合として一致（各行の出現回数が全ファイルで同じ）を判定。OFFの場合は集合比較（存在有無のみ）。</li>
           <li>サイズ一致は「<b>総行数</b>（ヘッダー除外設定後）」「列数（各行の最大列数）」を参考に比較します。</li>
           <li>部分一致を集計し、<b>一致していない行をすべて</b>表として出力します（各ファイルの出現回数も併記）。</li>
+          <li>ヘッダー不一致時は<b>手動カラム対応</b>が可能。さらに<b>部分的な検査</b>で、任意のキー＆比較カラムの一致を検査可能です。</li>
           <li>CSVパースは <a href="https://www.papaparse.com/" target="_blank" rel="noreferrer">Papa Parse</a> を使用します（RFC4180準拠）。</li>
         </ul>
       </details>
@@ -128,20 +155,46 @@
     const skipHeader = document.getElementById('skipHeader');
     const trimCells = document.getElementById('trimCells');
     const treatAsMultiset = document.getElementById('treatAsMultiset');
+
     const colmapCard = document.getElementById('colmapCard');
     const colmapContainer = document.getElementById('colmapContainer');
     const applyMappingBtn = document.getElementById('applyMappingBtn');
 
+    const partialCard = document.getElementById('partialCard');
+    const partialConfig = document.getElementById('partialConfig');
+    const partialResult = document.getElementById('partialResult');
+    const partialTrim = document.getElementById('partialTrim');
+    const partialStrict = document.getElementById('partialStrict');
+    const runPartialBtn = document.getElementById('runPartialBtn');
+
     /** @type {File[]} */
     let files = [];
-
-    // ヘッダーとカラム対応用の状態
-    /** @type {string[][]} */
+    /** headers and raw rows **/
     let headersPerFile = [];
-    /** @type {Record<number, number[]>} */
+    let rawRowsPerFile = [];
+
+    /** column mapping state for header alignment **/
     let columnMappings = {}; // fileIndex -> [sourceIdx per canonical order]
     let mappingActive = false;
 
+    let lastReport = null;
+
+    // ---------- Utils ----------
+    function escapeHtml(s){
+      return String(s)
+        .replaceAll('&','&amp;')
+        .replaceAll('<','&lt;')
+        .replaceAll('>','&gt;');
+    }
+    function csvEscape(s){
+      const t = String(s);
+      if (/[",\n]/.test(t)) return '"' + t.replace(/"/g, '""') + '"';
+      return t;
+    }
+    function norm(s, trim){ return trim ? String(s).trim() : String(s); }
+    const fmt = (n)=> new Intl.NumberFormat('ja-JP').format(n);
+
+    // ---------- File UI ----------
     function refreshList(){
       fileList.innerHTML = '';
       files.forEach((f, idx) => {
@@ -165,12 +218,15 @@
       exportBtn.disabled = true;
       summary.innerHTML = files.length < 2 ? '<span class="muted">CSVを2個以上追加してください。</span>' : '<span class="muted">準備OK。「解析する」を押してください。</span>';
       detailsWrap.innerHTML = '<span class="muted">不一致がある場合、ここに一覧が表示されます。</span>';
-      // マッピング状態リセット
       headersPerFile = [];
+      rawRowsPerFile = [];
       columnMappings = {};
       mappingActive = false;
       colmapCard.style.display = 'none';
       colmapContainer.innerHTML = '';
+      partialCard.style.display = 'none';
+      partialConfig.innerHTML = '';
+      partialResult.textContent = '設定後に「部分的検査を実行」を押してください。';
     }
 
     fileInput.addEventListener('change', (e)=>{
@@ -191,27 +247,29 @@
 
     skipHeader.addEventListener('change', ()=>{
       if (skipHeader.checked){
-        // ヘッダーを使わないならマッピングは無効
+        // ヘッダー/部分検査は無効
         colmapCard.style.display = 'none';
         colmapContainer.innerHTML = '';
         mappingActive = false;
         columnMappings = {};
+        partialCard.style.display = 'none';
       }
     });
 
+    // ---------- Core ----------
     analyzeBtn.addEventListener('click', async ()=>{
       summary.innerHTML = '解析中…';
       try {
         const parsed = await Promise.all(files.map(f => parseCsvFile(f)));
+        rawRowsPerFile = parsed.map(x=>x);
         const cfg = { skipHeader: skipHeader.checked, trim: trimCells.checked, multiset: treatAsMultiset.checked };
 
-        // まずヘッダー抽出（常に1行目を読んでおく）
+        // 抽出したヘッダー
         headersPerFile = parsed.map(rows => extractHeader(rows, { trim: cfg.trim }));
 
         // ヘッダー不一致か判定（skipHeaderがOFFの時のみ）
         const headerCheck = (!cfg.skipHeader) && headersMismatch(headersPerFile);
         if (headerCheck){
-          // マッピングUIを提示
           buildColumnMappingUI(headersPerFile, files.map(f=>f.name));
           colmapCard.style.display = '';
         } else {
@@ -219,6 +277,15 @@
           colmapContainer.innerHTML = '';
           mappingActive = false;
           columnMappings = {};
+        }
+
+        // 部分的検査の設定UI（ヘッダーがあるときのみ）
+        if (!cfg.skipHeader && headersPerFile.length >= 2 && headersPerFile[0].length > 0){
+          buildPartialUI(headersPerFile, files.map(f=>f.name));
+          partialCard.style.display = '';
+        } else {
+          partialCard.style.display = 'none';
+          partialConfig.innerHTML = '';
         }
 
         // 正規化（必要ならマッピングを適用）
@@ -246,8 +313,7 @@
       setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
     });
 
-    applyMappingBtn.addEventListener('click', async ()=>{
-      // マッピングが設定されていれば再解析
+    applyMappingBtn.addEventListener('click', ()=>{
       if (!Object.keys(columnMappings).length){
         alert('カラム対応が設定されていません');
         return;
@@ -256,6 +322,23 @@
       analyzeBtn.click();
     });
 
+    runPartialBtn.addEventListener('click', ()=>{
+      try {
+        const cfg = { trim: partialTrim.checked, strict: partialStrict.checked };
+        const setup = readPartialSelection();
+        if (!setup){
+          partialResult.innerHTML = '<span class="bad">部分的検査の設定が不完全です。</span>';
+          return;
+        }
+        const result = runPartialCheck(setup, cfg);
+        renderPartialResult(result);
+      } catch (e){
+        console.error(e);
+        partialResult.innerHTML = `<span class="bad">エラー: ${escapeHtml(String(e))}</span>`;
+      }
+    });
+
+    // ---------- Parsing & Normalization ----------
     function parseCsvFile(file){
       return new Promise((resolve, reject)=>{
         Papa.parse(file, {
@@ -302,7 +385,7 @@
     }
 
     function rowKey(cells){
-      return cells.join('\u241F'); // 衝突しにくい不可視セパレータ
+      return cells.join('\u241F');
     }
 
     function toFreqMap(rows){
@@ -314,6 +397,7 @@
       return m;
     }
 
+    // ---------- Comparison & Report ----------
     function compareMany(normalizedArray, filenames, {multiset}){
       const files = normalizedArray.map((n, idx) => ({
         name: filenames[idx],
@@ -324,21 +408,14 @@
         freq: toFreqMap(n.rows)
       }));
 
-      // サイズ情報
       const sizeSummary = files.map(f=>({ name:f.name, rows:f.totalRows, minCols:f.minCols, maxCols:f.maxCols }));
 
-      // キーの全体集合
       const allKeys = new Set();
       for (const f of files){ for (const k of f.freq.keys()) allKeys.add(k); }
 
-      // 完全一致判定 & 部分一致集計
       let fullyEqual = true;
-      let commonCount = 0; // 全ファイル共通（多重度は min で計上）
-
-      // 各ファイルの不一致カウント（余剰分）
+      let commonCount = 0;
       const perFileUnmatched = files.map(()=>0);
-
-      // 不一致行の詳細レコード
       const mismatchRows = [];
 
       for (const k of allKeys){
@@ -346,8 +423,7 @@
         const minCount = Math.min(...counts);
         const maxCount = Math.max(...counts);
         if (multiset){
-          commonCount += minCount; // 多重集合の共通要素数
-          // 不一致の余剰分
+          commonCount += minCount;
           counts.forEach((c, i)=>{ perFileUnmatched[i] += Math.max(0, c - minCount); });
           if (!(minCount === maxCount)) fullyEqual = false;
         } else {
@@ -357,40 +433,107 @@
           counts.forEach((c, i)=>{ if (allHave) return; if (c>0) perFileUnmatched[i]+=1; });
           if (!allHave) fullyEqual = false;
         }
-
-        // 不一致一覧用（全て等しい場合はスキップ）
         const allEqualCounts = counts.every(c => c === counts[0]);
-        if (!allEqualCounts){
-          mismatchRows.push({ key:k, counts, sample: k.split('\u241F') });
-        }
+        if (!allEqualCounts){ mismatchRows.push({ key:k, counts, sample: k.split('\u241F') }); }
       }
 
-      // 行数・列数のサイズ完全一致（参考）
       const rowsAllSame = files.every(f => f.totalRows === files[0].totalRows);
       const colsAllSame = files.every(f => f.maxCols === files[0].maxCols && f.minCols === files[0].minCols);
-
-      if (fullyEqual){
-        if (!rowsAllSame) fullyEqual = false;
-      }
+      if (fullyEqual){ if (!rowsAllSame) fullyEqual = false; }
 
       const unionSize = allKeys.size;
 
-      return {
-        config: { multiset },
-        files,
-        sizeSummary,
-        rowsAllSame,
-        colsAllSame,
-        fullyEqual,
-        commonCount,
-        unionSize,
-        perFileUnmatched,
-        mismatchRows
-      };
+      return { config: { multiset }, files, sizeSummary, rowsAllSame, colsAllSame, fullyEqual, commonCount, unionSize, perFileUnmatched, mismatchRows };
     }
 
-    let lastReport = null;
+    function renderReport(report){
+      lastReport = report;
+      const { sizeSummary, rowsAllSame, colsAllSame, fullyEqual, commonCount, unionSize, perFileUnmatched, files, mismatchRows, config } = report;
 
+      // 不一致時に各ファイルのカラム一覧を提示（ヘッダー有りの場合）
+      const colLists = (headersPerFile && headersPerFile.length>0) ? `
+        <details style="margin-top:8px">
+          <summary>各ファイルのカラム一覧を表示</summary>
+          <div class="grid-2" style="margin-top:8px">
+            ${headersPerFile.map((h, i)=>`
+              <div class="card" style="padding:10px">
+                <div style="margin-bottom:6px"><b><code>${escapeHtml(files[i].name)}</code></b></div>
+                <div class="muted">${(h||[]).map(x=>`<code>${escapeHtml(x)}</code>`).join(' , ') || '(ヘッダーなし)'}</div>
+              </div>
+            `).join('')}
+          </div>
+        </details>` : '';
+
+      const pills = [];
+      pills.push(`<span class="pill">モード: ${config.multiset ? '多重集合（重複数も比較）' : '集合（存在のみ）'}</span>`);
+      pills.push(`<span class="pill">ファイル数: ${files.length}</span>`);
+      pills.push(`<span class="pill">共通行数: <b>${fmt(commonCount)}</b></span>`);
+      if (!config.multiset) pills.push(`<span class="pill">行（ユニーク）全体: <b>${fmt(unionSize)}</b></span>`);
+
+      const sizeTable = `
+        <table>
+          <thead><tr><th>ファイル</th><th>行数</th><th>列数（min / max）</th><th>不一致行（余剰）</th></tr></thead>
+          <tbody>
+            ${sizeSummary.map((s, i)=>`
+              <tr>
+                <td><code>${escapeHtml(s.name)}</code></td>
+                <td>${fmt(s.rows)}</td>
+                <td>${s.minCols} / ${s.maxCols}</td>
+                <td>${fmt(perFileUnmatched[i])}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>`;
+
+      const status = fullyEqual
+        ? `<div class="good">✅ 完全一致：全ファイルの<b>全行（${config.multiset?'重複数も比較':''}</b>）が一致し、行数も一致しています。</div>`
+        : `<div class="bad">❌ 完全一致ではありません。</div>`;
+
+      const sizeHints = `
+        <div style="margin-top:6px" class="muted">
+          <span class="pill ${rowsAllSame?'good':'bad'}">行数 ${rowsAllSame?'一致':'不一致'}</span>
+          <span class="pill ${colsAllSame?'good':'warn'}">列数（min/max） ${colsAllSame?'一致':'差あり（参考）'}</span>
+        </div>`;
+
+      summary.innerHTML = `
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">${pills.join('')}</div>
+        ${status}
+        ${sizeHints}
+        <div style="margin-top:10px">${sizeTable}</div>
+        ${fullyEqual ? '' : colLists}
+        <div style="margin-top:10px" class="muted">部分一致の集計：<b>共通行数 = ${fmt(commonCount)}</b>、各ファイルの「不一致行（余剰）」は表の右列をご参照ください。</div>
+      `;
+
+      if (mismatchRows.length === 0){
+        detailsWrap.innerHTML = `<div class="good">不一致行はありません。</div>`;
+        exportBtn.disabled = true;
+        return;
+      }
+
+      const header = `<thead><tr><th>行（セル一覧）</th>${files.map(f=>`<th>出現回数<br><code>${escapeHtml(f.name)}</code></th>`).join('')}</tr></thead>`;
+      const body = mismatchRows.map(rec => {
+        const rowHtml = `<code>${escapeHtml(rec.sample.join(' | '))}</code>`;
+        const countsHtml = rec.counts.map(c => `<td>${fmt(c)}</td>`).join('');
+        return `<tr><td>${rowHtml}</td>${countsHtml}</tr>`;
+      }).join('');
+
+      detailsWrap.innerHTML = `<div style="overflow:auto; max-height: 560px; border:1px solid #1f2937; border-radius: 10px;"><table>${header}<tbody>${body}</tbody></table></div>`;
+      exportBtn.disabled = false;
+    }
+
+    function exportMismatchesCsv(report){
+      const headers = ['cell_0','cell_1','cell_2','...'].concat(report.files.map(f=>`count__${f.name}`));
+      const lines = [];
+      lines.push(headers.map(csvEscape).join(','));
+      for (const rec of report.mismatchRows){
+        const row = rec.sample.map(csvEscape);
+        const counts = rec.counts.map(n=>String(n));
+        lines.push(row.concat(counts).join(','));
+      }
+      return lines.join('\n');
+    }
+
+    // ---------- Header mismatch helpers ----------
     function headersMismatch(allHeaders){
       if (allHeaders.length < 2) return false;
       const ref = JSON.stringify(allHeaders[0] || []);
@@ -437,10 +580,15 @@
           const tdR = document.createElement('td');
           const sel = document.createElement('select');
           sel.className = 'btn';
-          options.forEach(opt=>{
+          options.forEach(opt => {
             const o = document.createElement('option');
             o.value = String(opt.idx);
             o.textContent = opt.label;
+
+            // 🎨 ← ここでスタイルを個別指定
+            o.style.backgroundColor = '#0f172a';
+            o.style.color = '#e5e7eb';
+
             sel.appendChild(o);
           });
           // 既定：同名があれば同名、なければ同じインデックス、それもなければ-1
@@ -462,94 +610,164 @@
       }
     }
 
-    function renderReport(report){
-      lastReport = report;
-      const { sizeSummary, rowsAllSame, colsAllSame, fullyEqual, commonCount, unionSize, perFileUnmatched, files, mismatchRows, config } = report;
+    // ---------- Partial check UI & logic ----------
+    function buildPartialUI(allHeaders, names){
+      partialConfig.innerHTML = '';
+      // 先頭（基準）
+      const ref = document.createElement('div');
+      ref.className = 'card';
+      ref.style.padding = '12px';
+      ref.innerHTML = `<div style="margin-bottom:6px"><b>基準ファイル</b>: <code>${escapeHtml(names[0])}</code></div>`;
+      const refKeySel = makeSelect(allHeaders[0], 'キー列（例: index）');
+      const refValSel = makeSelect(allHeaders[0], '比較列（例: raw_votes）');
+      ref.appendChild(refKeySel.wrap);
+      ref.appendChild(refValSel.wrap);
+      ref.dataset.keySelId = refKeySel.select.id;
+      ref.dataset.valSelId = refValSel.select.id;
+      partialConfig.appendChild(ref);
 
-      const pills = [];
-      pills.push(`<span class="pill">モード: ${config.multiset ? '多重集合（重複数も比較）' : '集合（存在のみ）'}</span>`);
-      pills.push(`<span class="pill">ファイル数: ${files.length}</span>`);
-      pills.push(`<span class="pill">共通行数: <b>${fmt(commonCount)}</b></span>`);
-      if (!config.multiset) pills.push(`<span class="pill">行（ユニーク）全体: <b>${fmt(unionSize)}</b></span>`);
+      // 初期推奨（index/raw_votesがあれば選択）
+      const refKeyIdx = (allHeaders[0]||[]).findIndex(h=>h==='index');
+      if (refKeyIdx >= 0) refKeySel.select.value = String(refKeyIdx);
+      const refValIdx = (allHeaders[0]||[]).findIndex(h=>h==='raw_votes');
+      if (refValIdx >= 0) refValSel.select.value = String(refValIdx);
 
-      const sizeTable = `
-        <table>
-          <thead><tr><th>ファイル</th><th>行数</th><th>列数（min / max）</th><th>不一致行（余剰）</th></tr></thead>
-          <tbody>
-            ${sizeSummary.map((s, i)=>`
-              <tr>
-                <td><code>${escapeHtml(s.name)}</code></td>
-                <td>${fmt(s.rows)}</td>
-                <td>${s.minCols} / ${s.maxCols}</td>
-                <td>${fmt(perFileUnmatched[i])}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>`;
+      // 他ファイル
+      for (let i=1;i<allHeaders.length;i++){
+        const blk = document.createElement('div');
+        blk.className = 'card';
+        blk.style.padding = '12px';
+        blk.innerHTML = `<div style="margin-bottom:6px"><b>比較対象</b>: <code>${escapeHtml(names[i])}</code></div>`;
+        const keySel = makeSelect(allHeaders[i], 'キー列');
+        const valSel = makeSelect(allHeaders[i], '比較列');
 
-      const status = fullyEqual
-        ? `<div class="good">✅ 完全一致：全ファイルの<b>全行（${config.multiset?'重複数含む':''}</b>）が一致し、行数も一致しています。</div>`
-        : `<div class="bad">❌ 完全一致ではありません。</div>`;
+        // 初期値ヒューリスティクス
+        const idxCand = ['index','id','Idx','ID'];
+        const rk = (allHeaders[i]||[]).findIndex(h=> h==='index');
+        if (rk>=0) keySel.select.value = String(rk); else {
+          const k2 = (allHeaders[i]||[]).findIndex(h=> idxCand.includes(h));
+          if (k2>=0) keySel.select.value = String(k2);
+        }
+        const rv = (allHeaders[i]||[]).findIndex(h=> h==='votes' || h==='raw_votes');
+        if (rv>=0) valSel.select.value = String(rv);
 
-      const sizeHints = `
-        <div style="margin-top:6px" class="muted">
-          <span class="pill ${rowsAllSame?'good':'bad'}">行数 ${rowsAllSame?'一致':'不一致'}</span>
-          <span class="pill ${colsAllSame?'good':'warn'}">列数（min/max） ${colsAllSame?'一致':'差あり（参考）'}</span>
-        </div>`;
+        blk.appendChild(keySel.wrap);
+        blk.appendChild(valSel.wrap);
+        blk.dataset.keySelId = keySel.select.id;
+        blk.dataset.valSelId = valSel.select.id;
+        blk.dataset.fileIndex = String(i);
+        partialConfig.appendChild(blk);
+      }
+    }
 
-      summary.innerHTML = `
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">${pills.join('')}</div>
-        ${status}
-        ${sizeHints}
-        <div style="margin-top:10px">${sizeTable}</div>
-        <div style="margin-top:10px" class="muted">部分一致の集計：<b>共通行数 = ${fmt(commonCount)}</b>、各ファイルの「不一致行（余剰）」は表の右列をご参照ください。</div>
+    function makeSelect(options, label){
+      const id = 'sel_' + Math.random().toString(36).slice(2);
+      const wrap = document.createElement('div');
+      wrap.className = 'control';
+      const lab = document.createElement('label');
+      lab.textContent = label + '：';
+      lab.style.minWidth = '160px';
+      const sel = document.createElement('select');
+      sel.className = 'btn'; sel.id = id;
+      (options||[]).forEach((h, idx)=>{
+        const o = document.createElement('option');
+        o.value = String(idx);
+        o.textContent = h;
+        sel.appendChild(o);
+      });
+      wrap.appendChild(lab); wrap.appendChild(sel);
+      return {wrap, select: sel};
+    }
+
+    function readPartialSelection(){
+      if (skipHeader.checked) return null;
+      if (headersPerFile.length < 2) return null;
+      const blocks = Array.from(partialConfig.children);
+      if (blocks.length < 2) return null;
+      const refBlk = blocks[0];
+      const refKeyIdx = parseInt(document.getElementById(refBlk.dataset.keySelId).value, 10);
+      const refValIdx = parseInt(document.getElementById(refBlk.dataset.valSelId).value, 10);
+      const targets = [];
+      for (let i=1;i<blocks.length;i++){
+        const b = blocks[i];
+        const keyIdx = parseInt(document.getElementById(b.dataset.keySelId).value, 10);
+        const valIdx = parseInt(document.getElementById(b.dataset.valSelId).value, 10);
+        const fileIndex = parseInt(b.dataset.fileIndex, 10);
+        targets.push({ fileIndex, keyIdx, valIdx });
+      }
+      return { ref: { fileIndex:0, keyIdx:refKeyIdx, valIdx:refValIdx }, targets };
+    }
+
+    function runPartialCheck(setup, {trim, strict}){
+      // 参照マップ
+      const refRows = rawRowsPerFile[setup.ref.fileIndex] || [];
+      const refMap = new Map();
+      for (let i=1;i<refRows.length;i++){
+        const r = refRows[i]; if (!Array.isArray(r)) continue;
+        const k = norm(String(r[setup.ref.keyIdx] ?? ''), trim);
+        const v = norm(String(r[setup.ref.valIdx] ?? ''), trim);
+        if (!refMap.has(k)) refMap.set(k, v);
+      }
+      const out = [];
+      for (const t of setup.targets){
+        const rows = rawRowsPerFile[t.fileIndex] || [];
+        let matched=0, mismatched=0, missing=0, extra=0;
+        const mismatches = [];
+        const seenKeys = new Set();
+        for (let i=1;i<rows.length;i++){
+          const r = rows[i]; if (!Array.isArray(r)) continue;
+          const k = norm(String(r[t.keyIdx] ?? ''), trim);
+          const v = norm(String(r[t.valIdx] ?? ''), trim);
+          seenKeys.add(k);
+          if (!refMap.has(k)){
+            extra++; // 相手にしかないキー
+            mismatches.push({ key:k, ref:'(なし)', other:v });
+          } else {
+            const rv = refMap.get(k);
+            const eq = strict ? v === rv : v == rv;
+            if (eq) matched++; else { mismatched++; mismatches.push({ key:k, ref:rv, other:v }); }
+          }
+        }
+        // 参照側にあるが相手にないキー
+        for (const k of refMap.keys()){
+          if (!seenKeys.has(k)){
+            missing++;
+            mismatches.push({ key:k, ref:refMap.get(k), other:'(なし)' });
+          }
+        }
+        out.push({ fileIndex:t.fileIndex, matched, mismatched, missing, extra, mismatches });
+      }
+      return out;
+    }
+
+    function renderPartialResult(results){
+      const names = files.map(f=>f.name);
+      const refName = names[0];
+      const header = `
+        <div class="pill">基準: <code>${escapeHtml(refName)}</code></div>
+        <div class="muted" style="margin-top:6px">一致=キーがあり値も一致 / 不一致=キーはあるが値が異なる / missing=基準にのみ存在 / extra=比較側にのみ存在</div>
       `;
-
-      if (mismatchRows.length === 0){
-        detailsWrap.innerHTML = `<div class="good">不一致行はありません。</div>`;
-        exportBtn.disabled = true;
-        return;
-      }
-
-      const header = `<thead><tr><th>行（セル一覧）</th>${files.map(f=>`<th>出現回数<br><code>${escapeHtml(f.name)}</code></th>`).join('')}</tr></thead>`;
-      const body = mismatchRows.map(rec => {
-        const rowHtml = `<code>${escapeHtml(rec.sample.join(' | '))}</code>`;
-        const countsHtml = rec.counts.map(c => `<td>${fmt(c)}</td>`).join('');
-        return `<tr><td>${rowHtml}</td>${countsHtml}</tr>`;
+      const tables = results.map(r=>{
+        const fname = names[r.fileIndex];
+        const sum = `<div style="margin:6px 0" class="muted">一致: <b>${fmt(r.matched)}</b> / 不一致: <b>${fmt(r.mismatched)}</b> / missing: <b>${fmt(r.missing)}</b> / extra: <b>${fmt(r.extra)}</b></div>`;
+        const rows = r.mismatches.map(x=>`<tr><td><code>${escapeHtml(x.key)}</code></td><td><code>${escapeHtml(x.ref)}</code></td><td><code>${escapeHtml(x.other)}</code></td></tr>`).join('');
+        const table = `
+          <div class="card" style="padding:12px; margin-top:8px">
+            <div><b>比較対象:</b> <code>${escapeHtml(fname)}</code></div>
+            ${sum}
+            <div style="overflow:auto; max-height: 420px; border:1px solid #1f2937; border-radius: 10px;">
+              <table>
+                <thead><tr><th>key</th><th>${escapeHtml(refName)} 値</th><th>${escapeHtml(fname)} 値</th></tr></thead>
+                <tbody>${rows || '<tr><td colspan="3" class="muted">差分はありません。</td></tr>'}</tbody>
+              </table>
+            </div>
+          </div>`;
+        return table;
       }).join('');
-
-      detailsWrap.innerHTML = `<div style="overflow:auto; max-height: 560px; border:1px solid #1f2937; border-radius: 10px;"><table>${header}<tbody>${body}</tbody></table></div>`;
-      exportBtn.disabled = false;
+      partialResult.innerHTML = header + tables;
     }
 
-    function exportMismatchesCsv(report){
-      const headers = ['cell_0','cell_1','cell_2','...'].concat(report.files.map(f=>`count__${f.name}`));
-      const lines = [];
-      lines.push(headers.map(csvEscape).join(','));
-      for (const rec of report.mismatchRows){
-        const row = rec.sample.map(csvEscape);
-        const counts = rec.counts.map(n=>String(n));
-        lines.push(row.concat(counts).join(','));
-      }
-      return lines.join('\n');
-    }
-
-    function csvEscape(s){
-      const t = String(s);
-      if (/[",\n]/.test(t)) return '"' + t.replace(/"/g, '""') + '"';
-      return t;
-    }
-
-    function escapeHtml(s){
-      return String(s)
-        .replaceAll('&','&amp;')
-        .replaceAll('<','&lt;')
-        .replaceAll('>','&gt;');
-    }
-
-    const fmt = (n)=> new Intl.NumberFormat('ja-JP').format(n);
-
-    // 初期化
+    // ---------- Init ----------
     onFilesChanged();
   </script>
 </body>

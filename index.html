@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CSV差分チェッカー</title>
+  <style>
+    :root { --bg:#0f172a; --panel:#111827; --muted:#334155; --text:#e5e7eb; --accent:#22d3ee; --good:#22c55e; --bad:#ef4444; --warn:#f59e0b; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans JP, Helvetica, Arial, "Apple Color Emoji"; background: radial-gradient(1200px 800px at 70% -10%, #111827, #0b1222), var(--bg); color: var(--text); }
+    header { padding: 18px 20px; border-bottom: 1px solid #1f2937; position: sticky; top:0; backdrop-filter: blur(6px); background: rgba(15,23,42,0.7); z-index:5; }
+    header h1 { margin:0; font-size: 18px; letter-spacing: .03em; }
+    main { max-width: 1200px; margin: 24px auto 80px; padding: 0 16px; }
+    .row { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    @media (min-width: 960px){ .row { grid-template-columns: 420px 1fr; } }
+
+    .card { background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.0)); border: 1px solid #1f2937; border-radius: 16px; padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04); }
+
+    .dropzone { border: 2px dashed #334155; border-radius: 14px; padding: 18px; text-align: center; transition: .2s border-color, .2s background; background: #0b1220; }
+    .dropzone.dragover { border-color: var(--accent); background: rgba(34,211,238,0.08); }
+    .muted { color: #94a3b8; font-size: 13px; }
+    .control { display:flex; align-items:center; gap:8px; margin: 8px 0; }
+    .control label { font-size: 14px; color:#cbd5e1; }
+
+    .btn { background: linear-gradient(180deg, #1f2937, #111827); border: 1px solid #334155; color: var(--text); padding: 10px 14px; border-radius: 12px; cursor:pointer; font-weight:600; letter-spacing:.02em; }
+    .btn:hover { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34,211,238,0.12); }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+
+    .filelist { display:flex; flex-direction:column; gap:8px; margin-top:12px; }
+    .fileitem { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border:1px solid #253144; border-radius:10px; background:#0b1220; }
+    .fileitem small { color:#94a3b8; }
+
+    .bad { color: var(--bad); }
+    .good { color: var(--good); }
+    .warn { color: var(--warn); }
+
+    .summary-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+    .pill { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; border:1px solid #334155; background:#0b1220; font-size:12px; }
+
+    table { width:100%; border-collapse: collapse; overflow: auto; }
+    thead th { position: sticky; top: 0; background:#0b1220; z-index:1; }
+    th, td { border-bottom: 1px solid #1f2937; padding: 8px 10px; text-align: left; vertical-align: top; font-size: 13px; }
+    tbody tr:hover { background: rgba(255,255,255,0.02); }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 12px; }
+
+    .footer { margin-top: 10px; display:flex; gap:8px; flex-wrap: wrap; align-items:center; }
+    .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; border:1px solid #334155; background:#0b1220; padding:2px 6px; border-radius:6px; font-size:12px; color:#cbd5e1; }
+
+    details { border:1px solid #253144; border-radius: 12px; padding: 10px 12px; background:#0b1220; }
+    details summary { cursor: pointer; user-select: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>CSV差分チェッカー（順不同一致・部分一致・ドラッグ＆ドロップ対応）</h1>
+  </header>
+  <main>
+    <div class="row">
+      <section class="card">
+        <h2 style="margin-top:0">1) ファイルを選ぶ</h2>
+        <div id="dropzone" class="dropzone">
+          <p style="margin:6px 0 2px">ここに <b>CSV</b> を<span class="muted">ドラッグ＆ドロップ</span>（2個以上）</p>
+          <p class="muted" style="margin:0">または</p>
+          <p style="margin:8px 0 0"><label class="btn">CSVを選択<input id="fileInput" type="file" accept=".csv,text/csv" multiple hidden></label></p>
+        </div>
+        <div class="control"><input type="checkbox" id="skipHeader"><label for="skipHeader">1行目をヘッダーとして <b>比較から除外</b>（ファイルごとに1行目をスキップ）</label></div>
+        <div class="control"><input type="checkbox" id="trimCells" checked><label for="trimCells">セル前後の空白をトリム</label></div>
+        <div class="control"><input type="checkbox" id="treatAsMultiset" checked><label for="treatAsMultiset">重複行の <b>個数</b>も比較（多重集合として一致を判定）</label></div>
+        <div class="filelist" id="fileList"></div>
+        <div class="footer muted">
+          <span class="kbd">⌘/Ctrl</span> + <span class="kbd">A</span> で複数選択 / 大きなCSVは数秒かかることがあります
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 style="margin-top:0">2) 解析結果</h2>
+        <div id="summary" class="muted">ファイルを読み込み次第、ここに結果を表示します。</div>
+        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+          <button id="analyzeBtn" class="btn" disabled>解析する</button>
+          <button id="clearBtn" class="btn" style="background:linear-gradient(180deg,#3f1f1f,#241313); border-color:#4b2b2b;" disabled>リセット</button>
+          <button id="exportBtn" class="btn" disabled>不一致行をCSVでエクスポート</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- 3) カラム対応（ヘッダー不一致時） -->
+    <section class="card" id="colmapCard" style="margin-top:16px; display:none">
+      <h3 style="margin-top:0">3) カラム対応（ヘッダー不一致時の再検査）</h3>
+      <p class="muted" style="margin-top:0">
+        ヘッダー（1行目）のカラム名がファイル間で一致しないため、<b>対応関係</b>を手動指定して再検査できます。<br>
+        ※「1行目をヘッダーとして比較から除外」がONの場合、この機能は利用できません。
+      </p>
+      <div id="colmapContainer" style="display:grid; gap:12px"></div>
+      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+        <button id="applyMappingBtn" class="btn">対応を適用して再検査</button>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:16px">
+      <h3 style="margin-top:0">詳細（不一致行 一覧）</h3>
+      <div id="detailsWrap" class="muted">不一致がある場合、この下に <b>行そのもの</b> と <b>各ファイルでの出現回数</b> を一覧表示します。</div>
+    </section>
+
+    <section class="card" style="margin-top:16px">
+      <details>
+        <summary>使い方 / 仕様</summary>
+        <ul>
+          <li>2個以上のCSVに対応。<b>行の順序は無視</b>します。</li>
+          <li>「重複行の個数も比較」をONの場合、多重集合として一致（各行の出現回数が全ファイルで同じ）を判定。OFFの場合は集合比較（存在有無のみ）。</li>
+          <li>サイズ一致は「<b>総行数</b>（ヘッダー除外設定後）」「列数（各行の最大列数）」を参考に比較します。</li>
+          <li>部分一致を集計し、<b>一致していない行をすべて</b>表として出力します（各ファイルの出現回数も併記）。</li>
+          <li>CSVパースは <a href="https://www.papaparse.com/" target="_blank" rel="noreferrer">Papa Parse</a> を使用します（RFC4180準拠）。</li>
+        </ul>
+      </details>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const dropzone = document.getElementById('dropzone');
+    const fileList = document.getElementById('fileList');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const summary = document.getElementById('summary');
+    const detailsWrap = document.getElementById('detailsWrap');
+    const skipHeader = document.getElementById('skipHeader');
+    const trimCells = document.getElementById('trimCells');
+    const treatAsMultiset = document.getElementById('treatAsMultiset');
+    const colmapCard = document.getElementById('colmapCard');
+    const colmapContainer = document.getElementById('colmapContainer');
+    const applyMappingBtn = document.getElementById('applyMappingBtn');
+
+    /** @type {File[]} */
+    let files = [];
+
+    // ヘッダーとカラム対応用の状態
+    /** @type {string[][]} */
+    let headersPerFile = [];
+    /** @type {Record<number, number[]>} */
+    let columnMappings = {}; // fileIndex -> [sourceIdx per canonical order]
+    let mappingActive = false;
+
+    function refreshList(){
+      fileList.innerHTML = '';
+      files.forEach((f, idx) => {
+        const div = document.createElement('div');
+        div.className = 'fileitem';
+        const name = document.createElement('div');
+        name.innerHTML = `<b>${escapeHtml(f.name)}</b><br><small>${(f.size/1024).toFixed(1)} KB</small>`;
+        const del = document.createElement('button');
+        del.className = 'btn';
+        del.textContent = '削除';
+        del.addEventListener('click', ()=>{ files.splice(idx,1); onFilesChanged(); });
+        div.appendChild(name); div.appendChild(del);
+        fileList.appendChild(div);
+      });
+    }
+
+    function onFilesChanged(){
+      refreshList();
+      analyzeBtn.disabled = files.length < 2;
+      clearBtn.disabled = files.length === 0;
+      exportBtn.disabled = true;
+      summary.innerHTML = files.length < 2 ? '<span class="muted">CSVを2個以上追加してください。</span>' : '<span class="muted">準備OK。「解析する」を押してください。</span>';
+      detailsWrap.innerHTML = '<span class="muted">不一致がある場合、ここに一覧が表示されます。</span>';
+      // マッピング状態リセット
+      headersPerFile = [];
+      columnMappings = {};
+      mappingActive = false;
+      colmapCard.style.display = 'none';
+      colmapContainer.innerHTML = '';
+    }
+
+    fileInput.addEventListener('change', (e)=>{
+      files = files.concat(Array.from(e.target.files || []));
+      onFilesChanged();
+      fileInput.value = '';
+    });
+
+    ;['dragenter','dragover'].forEach(ev=> dropzone.addEventListener(ev, (e)=>{ e.preventDefault(); e.stopPropagation(); dropzone.classList.add('dragover'); }));
+    ;['dragleave','drop'].forEach(ev=> dropzone.addEventListener(ev, (e)=>{ e.preventDefault(); e.stopPropagation(); dropzone.classList.remove('dragover'); }));
+    dropzone.addEventListener('drop', (e)=>{
+      const dropped = Array.from(e.dataTransfer.files || []).filter(f=>/\.csv$/i.test(f.name) || /text\//.test(f.type));
+      files = files.concat(dropped);
+      onFilesChanged();
+    });
+
+    clearBtn.addEventListener('click', ()=>{ files = []; onFilesChanged(); });
+
+    skipHeader.addEventListener('change', ()=>{
+      if (skipHeader.checked){
+        // ヘッダーを使わないならマッピングは無効
+        colmapCard.style.display = 'none';
+        colmapContainer.innerHTML = '';
+        mappingActive = false;
+        columnMappings = {};
+      }
+    });
+
+    analyzeBtn.addEventListener('click', async ()=>{
+      summary.innerHTML = '解析中…';
+      try {
+        const parsed = await Promise.all(files.map(f => parseCsvFile(f)));
+        const cfg = { skipHeader: skipHeader.checked, trim: trimCells.checked, multiset: treatAsMultiset.checked };
+
+        // まずヘッダー抽出（常に1行目を読んでおく）
+        headersPerFile = parsed.map(rows => extractHeader(rows, { trim: cfg.trim }));
+
+        // ヘッダー不一致か判定（skipHeaderがOFFの時のみ）
+        const headerCheck = (!cfg.skipHeader) && headersMismatch(headersPerFile);
+        if (headerCheck){
+          // マッピングUIを提示
+          buildColumnMappingUI(headersPerFile, files.map(f=>f.name));
+          colmapCard.style.display = '';
+        } else {
+          colmapCard.style.display = 'none';
+          colmapContainer.innerHTML = '';
+          mappingActive = false;
+          columnMappings = {};
+        }
+
+        // 正規化（必要ならマッピングを適用）
+        const normalized = parsed.map((rows, i) => {
+          const mapIdx = mappingActive ? (columnMappings[i] || null) : null;
+          return normalizeRows(rows, cfg, mapIdx);
+        });
+        const report = compareMany(normalized, files.map(f=>f.name), cfg);
+        renderReport(report);
+
+      } catch (err){
+        console.error(err);
+        summary.innerHTML = `<span class="bad">エラー: ${escapeHtml(String(err))}</span>`;
+      }
+    });
+
+    exportBtn.addEventListener('click', ()=>{
+      if (!lastReport) return;
+      const csv = exportMismatchesCsv(lastReport);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'mismatches.csv';
+      a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+    });
+
+    applyMappingBtn.addEventListener('click', async ()=>{
+      // マッピングが設定されていれば再解析
+      if (!Object.keys(columnMappings).length){
+        alert('カラム対応が設定されていません');
+        return;
+      }
+      mappingActive = true;
+      analyzeBtn.click();
+    });
+
+    function parseCsvFile(file){
+      return new Promise((resolve, reject)=>{
+        Papa.parse(file, {
+          skipEmptyLines: 'greedy',
+          dynamicTyping: false,
+          complete: (res)=> resolve(res.data),
+          error: (err)=> reject(err)
+        });
+      });
+    }
+
+    function extractHeader(rows, {trim}){
+      if (!rows || rows.length === 0) return [];
+      const r0 = rows[0] || [];
+      return r0.map(c => {
+        let s = String(c ?? '');
+        if (trim) s = s.trim();
+        return s;
+      });
+    }
+
+    function normalizeRows(rows, {skipHeader, trim}, reorderIndices=null){
+      const out = [];
+      const start = skipHeader ? 1 : 0;
+      let minCols = Infinity, maxCols = 0;
+      for (let i=start; i<rows.length; i++){
+        let r = rows[i];
+        if (!Array.isArray(r)) continue;
+        let cells = r.map(c => {
+          let s = String(c ?? '');
+          if (trim) s = s.trim();
+          return s;
+        });
+        if (Array.isArray(reorderIndices)){
+          const reordered = reorderIndices.map(idx => idx >= 0 ? (cells[idx] ?? '') : '');
+          cells = reordered;
+        }
+        minCols = Math.min(minCols, cells.length);
+        maxCols = Math.max(maxCols, cells.length);
+        out.push(cells);
+      }
+      if (minCols === Infinity){ minCols = 0; maxCols = 0; }
+      return { rows: out, minCols, maxCols };
+    }
+
+    function rowKey(cells){
+      return cells.join('\u241F'); // 衝突しにくい不可視セパレータ
+    }
+
+    function toFreqMap(rows){
+      const m = new Map();
+      for (const r of rows){
+        const k = rowKey(r);
+        m.set(k, (m.get(k)||0) + 1);
+      }
+      return m;
+    }
+
+    function compareMany(normalizedArray, filenames, {multiset}){
+      const files = normalizedArray.map((n, idx) => ({
+        name: filenames[idx],
+        rows: n.rows,
+        minCols: n.minCols,
+        maxCols: n.maxCols,
+        totalRows: n.rows.length,
+        freq: toFreqMap(n.rows)
+      }));
+
+      // サイズ情報
+      const sizeSummary = files.map(f=>({ name:f.name, rows:f.totalRows, minCols:f.minCols, maxCols:f.maxCols }));
+
+      // キーの全体集合
+      const allKeys = new Set();
+      for (const f of files){ for (const k of f.freq.keys()) allKeys.add(k); }
+
+      // 完全一致判定 & 部分一致集計
+      let fullyEqual = true;
+      let commonCount = 0; // 全ファイル共通（多重度は min で計上）
+
+      // 各ファイルの不一致カウント（余剰分）
+      const perFileUnmatched = files.map(()=>0);
+
+      // 不一致行の詳細レコード
+      const mismatchRows = [];
+
+      for (const k of allKeys){
+        const counts = files.map(f => f.freq.get(k) || 0);
+        const minCount = Math.min(...counts);
+        const maxCount = Math.max(...counts);
+        if (multiset){
+          commonCount += minCount; // 多重集合の共通要素数
+          // 不一致の余剰分
+          counts.forEach((c, i)=>{ perFileUnmatched[i] += Math.max(0, c - minCount); });
+          if (!(minCount === maxCount)) fullyEqual = false;
+        } else {
+          const present = counts.map(c=>c>0);
+          const allHave = present.every(Boolean);
+          if (allHave) commonCount += 1;
+          counts.forEach((c, i)=>{ if (allHave) return; if (c>0) perFileUnmatched[i]+=1; });
+          if (!allHave) fullyEqual = false;
+        }
+
+        // 不一致一覧用（全て等しい場合はスキップ）
+        const allEqualCounts = counts.every(c => c === counts[0]);
+        if (!allEqualCounts){
+          mismatchRows.push({ key:k, counts, sample: k.split('\u241F') });
+        }
+      }
+
+      // 行数・列数のサイズ完全一致（参考）
+      const rowsAllSame = files.every(f => f.totalRows === files[0].totalRows);
+      const colsAllSame = files.every(f => f.maxCols === files[0].maxCols && f.minCols === files[0].minCols);
+
+      if (fullyEqual){
+        if (!rowsAllSame) fullyEqual = false;
+      }
+
+      const unionSize = allKeys.size;
+
+      return {
+        config: { multiset },
+        files,
+        sizeSummary,
+        rowsAllSame,
+        colsAllSame,
+        fullyEqual,
+        commonCount,
+        unionSize,
+        perFileUnmatched,
+        mismatchRows
+      };
+    }
+
+    let lastReport = null;
+
+    function headersMismatch(allHeaders){
+      if (allHeaders.length < 2) return false;
+      const ref = JSON.stringify(allHeaders[0] || []);
+      for (let i=1;i<allHeaders.length;i++){
+        if (JSON.stringify(allHeaders[i] || []) !== ref) return true;
+      }
+      return false;
+    }
+
+    function buildColumnMappingUI(allHeaders, names){
+      colmapContainer.innerHTML = '';
+      columnMappings = {};
+      mappingActive = false;
+      if (skipHeader.checked) return; // ヘッダーを使わない設定ならスキップ
+
+      const canon = allHeaders[0] || [];
+      const info = document.createElement('div');
+      info.className = 'muted';
+      info.innerHTML = `基準ファイル: <code>${escapeHtml(names[0])}</code> のヘッダーを基準に、他ファイルの対応カラムを選択してください。`;
+      colmapContainer.appendChild(info);
+
+      for (let i=1;i<allHeaders.length;i++){
+        const wrap = document.createElement('div');
+        wrap.className = 'card';
+        wrap.style.padding = '12px';
+        const title = document.createElement('div');
+        title.innerHTML = `<b>対応指定: <code>${escapeHtml(names[i])}</code></b>`;
+        wrap.appendChild(title);
+
+        const tbl = document.createElement('table');
+        const thead = document.createElement('thead');
+        thead.innerHTML = '<tr><th>基準カラム名</th><th>このファイルのカラム</th></tr>';
+        tbl.appendChild(thead);
+        const tbody = document.createElement('tbody');
+
+        const options = (allHeaders[i] || []).map((h, idx)=>({label:h, idx}))
+          .concat([{label:'(空欄にする)', idx:-1}]);
+
+        const mappingIdx = [];
+        canon.forEach((cname, cIdx)=>{
+          const tr = document.createElement('tr');
+          const tdL = document.createElement('td');
+          tdL.innerHTML = `<code>${escapeHtml(cname)}</code>`;
+          const tdR = document.createElement('td');
+          const sel = document.createElement('select');
+          sel.className = 'btn';
+          options.forEach(opt=>{
+            const o = document.createElement('option');
+            o.value = String(opt.idx);
+            o.textContent = opt.label;
+            sel.appendChild(o);
+          });
+          // 既定：同名があれば同名、なければ同じインデックス、それもなければ-1
+          let pre = (allHeaders[i] || []).findIndex(h=>h===cname);
+          if (pre === -1) pre = cIdx < (allHeaders[i]||[]).length ? cIdx : -1;
+          sel.value = String(pre);
+          mappingIdx[cIdx] = pre;
+          sel.addEventListener('change', ()=>{
+            mappingIdx[cIdx] = parseInt(sel.value, 10);
+            columnMappings[i] = mappingIdx.slice();
+          });
+          tdR.appendChild(sel);
+          tr.appendChild(tdL); tr.appendChild(tdR); tbody.appendChild(tr);
+        });
+        tbl.appendChild(tbody);
+        wrap.appendChild(tbl);
+        colmapContainer.appendChild(wrap);
+        columnMappings[i] = mappingIdx.slice();
+      }
+    }
+
+    function renderReport(report){
+      lastReport = report;
+      const { sizeSummary, rowsAllSame, colsAllSame, fullyEqual, commonCount, unionSize, perFileUnmatched, files, mismatchRows, config } = report;
+
+      const pills = [];
+      pills.push(`<span class="pill">モード: ${config.multiset ? '多重集合（重複数も比較）' : '集合（存在のみ）'}</span>`);
+      pills.push(`<span class="pill">ファイル数: ${files.length}</span>`);
+      pills.push(`<span class="pill">共通行数: <b>${fmt(commonCount)}</b></span>`);
+      if (!config.multiset) pills.push(`<span class="pill">行（ユニーク）全体: <b>${fmt(unionSize)}</b></span>`);
+
+      const sizeTable = `
+        <table>
+          <thead><tr><th>ファイル</th><th>行数</th><th>列数（min / max）</th><th>不一致行（余剰）</th></tr></thead>
+          <tbody>
+            ${sizeSummary.map((s, i)=>`
+              <tr>
+                <td><code>${escapeHtml(s.name)}</code></td>
+                <td>${fmt(s.rows)}</td>
+                <td>${s.minCols} / ${s.maxCols}</td>
+                <td>${fmt(perFileUnmatched[i])}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>`;
+
+      const status = fullyEqual
+        ? `<div class="good">✅ 完全一致：全ファイルの<b>全行（${config.multiset?'重複数含む':''}</b>）が一致し、行数も一致しています。</div>`
+        : `<div class="bad">❌ 完全一致ではありません。</div>`;
+
+      const sizeHints = `
+        <div style="margin-top:6px" class="muted">
+          <span class="pill ${rowsAllSame?'good':'bad'}">行数 ${rowsAllSame?'一致':'不一致'}</span>
+          <span class="pill ${colsAllSame?'good':'warn'}">列数（min/max） ${colsAllSame?'一致':'差あり（参考）'}</span>
+        </div>`;
+
+      summary.innerHTML = `
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">${pills.join('')}</div>
+        ${status}
+        ${sizeHints}
+        <div style="margin-top:10px">${sizeTable}</div>
+        <div style="margin-top:10px" class="muted">部分一致の集計：<b>共通行数 = ${fmt(commonCount)}</b>、各ファイルの「不一致行（余剰）」は表の右列をご参照ください。</div>
+      `;
+
+      if (mismatchRows.length === 0){
+        detailsWrap.innerHTML = `<div class="good">不一致行はありません。</div>`;
+        exportBtn.disabled = true;
+        return;
+      }
+
+      const header = `<thead><tr><th>行（セル一覧）</th>${files.map(f=>`<th>出現回数<br><code>${escapeHtml(f.name)}</code></th>`).join('')}</tr></thead>`;
+      const body = mismatchRows.map(rec => {
+        const rowHtml = `<code>${escapeHtml(rec.sample.join(' | '))}</code>`;
+        const countsHtml = rec.counts.map(c => `<td>${fmt(c)}</td>`).join('');
+        return `<tr><td>${rowHtml}</td>${countsHtml}</tr>`;
+      }).join('');
+
+      detailsWrap.innerHTML = `<div style="overflow:auto; max-height: 560px; border:1px solid #1f2937; border-radius: 10px;"><table>${header}<tbody>${body}</tbody></table></div>`;
+      exportBtn.disabled = false;
+    }
+
+    function exportMismatchesCsv(report){
+      const headers = ['cell_0','cell_1','cell_2','...'].concat(report.files.map(f=>`count__${f.name}`));
+      const lines = [];
+      lines.push(headers.map(csvEscape).join(','));
+      for (const rec of report.mismatchRows){
+        const row = rec.sample.map(csvEscape);
+        const counts = rec.counts.map(n=>String(n));
+        lines.push(row.concat(counts).join(','));
+      }
+      return lines.join('\n');
+    }
+
+    function csvEscape(s){
+      const t = String(s);
+      if (/[",\n]/.test(t)) return '"' + t.replace(/"/g, '""') + '"';
+      return t;
+    }
+
+    function escapeHtml(s){
+      return String(s)
+        .replaceAll('&','&amp;')
+        .replaceAll('<','&lt;')
+        .replaceAll('>','&gt;');
+    }
+
+    const fmt = (n)=> new Intl.NumberFormat('ja-JP').format(n);
+
+    // 初期化
+    onFilesChanged();
+  </script>
+</body>
+</html>

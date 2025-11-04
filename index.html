@@ -1,114 +1,435 @@
 <!doctype html>
 <html lang="ja">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CSV差分チェッカー</title>
   <style>
-    :root { --bg:#0f172a; --panel:#111827; --muted:#334155; --text:#e5e7eb; --accent:#22d3ee; --good:#22c55e; --bad:#ef4444; --warn:#f59e0b; }
-    * { box-sizing: border-box; }
-    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans JP, Helvetica, Arial, "Apple Color Emoji"; background: radial-gradient(1200px 800px at 70% -10%, #111827, #0b1222), var(--bg); color: var(--text); }
-    header { padding: 18px 20px; border-bottom: 1px solid #1f2937; position: sticky; top:0; backdrop-filter: blur(6px); background: rgba(15,23,42,0.7); z-index:5; }
-    header h1 { margin:0; font-size: 18px; letter-spacing: .03em; }
-    main { max-width: 1200px; margin: 24px auto 80px; padding: 0 16px; }
-    .row { display: grid; grid-template-columns: 1fr; gap: 16px; }
-    @media (min-width: 960px){ .row { grid-template-columns: 420px 1fr; } }
+    :root {
+      --bg-primary: #0a0e1a;
+      --bg-secondary: #111827;
+      --bg-tertiary: #1a1f35;
+      --border: #2d3548;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --accent-light: rgba(59, 130, 246, 0.1);
+      --success: #10b981;
+      --success-light: rgba(16, 185, 129, 0.1);
+      --error: #ef4444;
+      --error-light: rgba(239, 68, 68, 0.1);
+      --warning: #f59e0b;
+      --warning-light: rgba(245, 158, 11, 0.1);
+    }
 
-    .card { background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.0)); border: 1px solid #1f2937; border-radius: 16px; padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04); }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
-    .dropzone { border: 2px dashed #334155; border-radius: 14px; padding: 18px; text-align: center; transition: .2s border-color, .2s background; background: #0b1220; }
-    .dropzone.dragover { border-color: var(--accent); background: rgba(34,211,238,0.08); }
-    .muted { color: #94a3b8; font-size: 13px; }
-    .control { display:flex; align-items:center; gap:8px; margin: 8px 0; }
-    .control label { font-size: 14px; color:#cbd5e1; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans JP", "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(135deg, #0a0e1a 0%, #1a1f35 100%);
+      color: var(--text-primary);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
 
-    .btn { background: linear-gradient(180deg, #1f2937, #111827); border: 1px solid #334155; color: var(--text); padding: 10px 14px; border-radius: 12px; cursor:pointer; font-weight:600; letter-spacing:.02em; }
-    .btn:hover { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34,211,238,0.12); }
-    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    header {
+      padding: 24px 32px;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      backdrop-filter: blur(12px);
+      background: rgba(10, 14, 26, 0.8);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+    }
 
-    .filelist { display:flex; flex-direction:column; gap:8px; margin-top:12px; }
-    .fileitem { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border:1px solid #253144; border-radius:10px; background:#0b1220; }
-    .fileitem small { color:#94a3b8; }
+    header h1 {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
 
-    .bad { color: var(--bad); }
-    .good { color: var(--good); }
-    .warn { color: var(--warn); }
+    .header-link {
+      padding: 12px 24px;
+      background: linear-gradient(135deg, var(--accent) 0%, #6366f1 100%);
+      color: white;
+      text-decoration: none;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 14px;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+      white-space: nowrap;
+    }
 
-    .pill { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; border:1px solid #334155; background:#0b1220; font-size:12px; }
+    .header-link:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+    }
 
-    table { width:100%; border-collapse: collapse; overflow: auto; }
-    thead th { position: sticky; top: 0; background:#0b1220; z-index:1; }
-    th, td { border-bottom: 1px solid #1f2937; padding: 8px 10px; text-align: left; vertical-align: top; font-size: 13px; }
-    tbody tr:hover { background: rgba(255,255,255,0.02); }
-    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 12px; }
+    main {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
 
-    .footer { margin-top: 10px; display:flex; gap:8px; flex-wrap: wrap; align-items:center; }
-    .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; border:1px solid #334155; background:#0b1220; padding:2px 6px; border-radius:6px; font-size:12px; color:#cbd5e1; }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 24px;
+      margin-bottom: 24px;
+    }
 
-    details { border:1px solid #253144; border-radius: 12px; padding: 10px 12px; background:#0b1220; }
-    details summary { cursor: pointer; user-select: none; }
+    @media (min-width: 1024px) {
+      .row {
+        grid-template-columns: 480px 1fr;
+      }
+    }
 
-    .grid-2 { display:grid; grid-template-columns: 1fr; gap:12px; }
-    @media (min-width: 840px){ .grid-2 { grid-template-columns: 1fr 1fr; } }
+    .card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 28px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+      transition: all 0.3s ease;
+    }
 
-    select.btn { padding-right:28px; }
+    .card:hover {
+      border-color: rgba(59, 130, 246, 0.3);
+      box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+    }
+
+    .card h2 {
+      margin: 0 0 20px 0;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .dropzone {
+      border: 2px dashed var(--border);
+      border-radius: 16px;
+      padding: 32px 24px;
+      text-align: center;
+      transition: all 0.3s ease;
+      background: var(--bg-tertiary);
+      cursor: pointer;
+    }
+
+    .dropzone:hover {
+      border-color: var(--accent);
+      background: var(--accent-light);
+    }
+
+    .dropzone.dragover {
+      border-color: var(--accent);
+      background: var(--accent-light);
+      transform: scale(1.02);
+    }
+
+    .dropzone p {
+      margin: 8px 0;
+    }
+
+    .dropzone b {
+      color: var(--accent);
+    }
+
+    .muted {
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    .control {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 12px 0;
+      padding: 12px;
+      background: var(--bg-tertiary);
+      border-radius: 10px;
+      transition: background 0.2s ease;
+    }
+
+    .control:hover {
+      background: rgba(59, 130, 246, 0.05);
+    }
+
+    .control input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      accent-color: var(--accent);
+    }
+
+    .control label {
+      font-size: 14px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .btn {
+      background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 12px 20px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 14px;
+      transition: all 0.3s ease;
+      white-space: nowrap;
+    }
+
+    .btn:hover:not(:disabled) {
+      border-color: var(--accent);
+      background: linear-gradient(135deg, var(--accent-light) 0%, var(--bg-tertiary) 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .filelist {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .fileitem {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--bg-tertiary);
+      transition: all 0.2s ease;
+    }
+
+    .fileitem:hover {
+      border-color: var(--accent);
+      background: var(--accent-light);
+    }
+
+    .fileitem small {
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .bad { color: var(--error); }
+    .good { color: var(--success); }
+    .warn { color: var(--warning); }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--bg-tertiary);
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+
+    .pill:hover {
+      border-color: var(--accent);
+      background: var(--accent-light);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      border-bottom: 1px solid var(--border);
+      padding: 12px 14px;
+      text-align: left;
+      vertical-align: top;
+      font-size: 14px;
+    }
+
+    th {
+      background: var(--bg-tertiary);
+      font-weight: 600;
+      color: var(--text-secondary);
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    tbody tr {
+      transition: background 0.2s ease;
+    }
+
+    tbody tr:hover {
+      background: var(--accent-light);
+    }
+
+    code {
+      font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+      font-size: 13px;
+      background: var(--bg-tertiary);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .footer {
+      margin-top: 16px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .kbd {
+      font-family: 'SF Mono', 'Monaco', monospace;
+      border: 1px solid var(--border);
+      background: var(--bg-tertiary);
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    details {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      background: var(--bg-tertiary);
+      margin-top: 12px;
+    }
+
+    details summary {
+      cursor: pointer;
+      user-select: none;
+      font-weight: 600;
+      color: var(--text-secondary);
+      transition: color 0.2s ease;
+    }
+
+    details summary:hover {
+      color: var(--accent);
+    }
+
+    details[open] summary {
+      margin-bottom: 12px;
+      color: var(--accent);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    @media (min-width: 840px) {
+      .grid-2 {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    select.btn {
+      padding-right: 36px;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .card {
+      animation: fadeIn 0.5s ease;
+    }
   </style>
 </head>
+
 <body>
   <header>
-    <h1>CSV差分チェッカー（順不同一致・部分的検査・カラム対応・ドラッグ＆ドロップ対応）</h1>
+    <h1>📊 CSV差分チェッカー</h1>
+    <a href="analysis.html" class="header-link">相関分析ページへ →</a>
   </header>
   <main>
     <div class="row">
       <section class="card">
-        <h2 style="margin-top:0">1) ファイルを選ぶ</h2>
+        <h2>1️⃣ ファイルを選ぶ</h2>
         <div id="dropzone" class="dropzone">
-          <p style="margin:6px 0 2px">ここに <b>CSV</b> を<span class="muted">ドラッグ＆ドロップ</span>（2個以上）</p>
-          <p class="muted" style="margin:0">または</p>
-          <p style="margin:8px 0 0"><label class="btn">CSVを選択<input id="fileInput" type="file" accept=".csv,text/csv" multiple hidden></label></p>
+          <p style="margin:6px 0 2px; font-size: 16px;">ここに <b>CSV</b> をドラッグ＆ドロップ（2個以上）</p>
+          <p class="muted" style="margin:4px 0">または</p>
+          <p style="margin:12px 0 0"><label class="btn" style="background: linear-gradient(135deg, var(--accent) 0%, #6366f1 100%); color: white; border: none;">📁 CSVを選択<input id="fileInput" type="file" accept=".csv,text/csv" multiple></label></p>
         </div>
-        <div class="control"><input type="checkbox" id="skipHeader"><label for="skipHeader">1行目をヘッダーとして <b>比較から除外</b>（ファイルごとに1行目をスキップ）</label></div>
+        <div class="control"><input type="checkbox" id="skipHeader"><label for="skipHeader">1行目をヘッダーとして <b>比較から除外</b></label></div>
         <div class="control"><input type="checkbox" id="trimCells" checked><label for="trimCells">セル前後の空白をトリム</label></div>
-        <div class="control"><input type="checkbox" id="treatAsMultiset" checked><label for="treatAsMultiset">重複行の <b>個数</b>も比較（多重集合として一致を判定）</label></div>
+        <div class="control"><input type="checkbox" id="treatAsMultiset" checked><label for="treatAsMultiset">重複行の <b>個数</b>も比較</label></div>
         <div class="filelist" id="fileList"></div>
         <div class="footer muted">
-          <span class="kbd">⌘/Ctrl</span> + <span class="kbd">A</span> で複数選択 / 大きなCSVは数秒かかることがあります
+          <span class="kbd">⌘/Ctrl</span> + <span class="kbd">A</span> で複数選択
         </div>
       </section>
 
       <section class="card">
-        <h2 style="margin-top:0">2) 解析結果</h2>
+        <h2>2️⃣ 解析結果</h2>
         <div id="summary" class="muted">ファイルを読み込み次第、ここに結果を表示します。</div>
-        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-          <button id="analyzeBtn" class="btn" disabled>解析する</button>
-          <button id="clearBtn" class="btn" style="background:linear-gradient(180deg,#3f1f1f,#241313); border-color:#4b2b2b;" disabled>リセット</button>
-          <button id="exportBtn" class="btn" disabled>不一致行をCSVでエクスポート</button>
+        <div style="margin-top:16px; display:flex; gap:12px; flex-wrap:wrap;">
+          <button id="analyzeBtn" class="btn" style="background: linear-gradient(135deg, var(--success) 0%, #059669 100%); color: white; border: none;" disabled>🔍 解析する</button>
+          <button id="clearBtn" class="btn" style="background: linear-gradient(135deg, var(--error) 0%, #dc2626 100%); color: white; border: none;" disabled>🗑️ リセット</button>
+          <button id="exportBtn" class="btn" disabled>💾 不一致行をエクスポート</button>
         </div>
       </section>
     </div>
 
-    <!-- 3) カラム対応（ヘッダー不一致時） -->
-    <section class="card" id="colmapCard" style="margin-top:16px; display:none">
-      <h3 style="margin-top:0">3) カラム対応（ヘッダー不一致時の再検査）</h3>
+    <section class="card" id="colmapCard" style="display:none">
+      <h3 style="margin-top:0; font-size: 18px;">3️⃣ カラム対応（ヘッダー不一致時の再検査）</h3>
       <p class="muted" style="margin-top:0">
-        ヘッダー（1行目）のカラム名がファイル間で一致しないため、<b>対応関係</b>を手動指定して再検査できます。<br>
-        ※「1行目をヘッダーとして比較から除外」がONの場合、この機能は利用できません。
+        ヘッダー（1行目）のカラム名がファイル間で一致しないため、<b>対応関係</b>を手動指定して再検査できます。
       </p>
-      <div id="colmapContainer" style="display:grid; gap:12px"></div>
-      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-        <button id="applyMappingBtn" class="btn">対応を適用して再検査</button>
+      <div id="colmapContainer" style="display:grid; gap:16px"></div>
+      <div style="margin-top:16px; display:flex; gap:12px; flex-wrap:wrap;">
+        <button id="applyMappingBtn" class="btn" style="background: linear-gradient(135deg, var(--accent) 0%, #6366f1 100%); color: white; border: none;">✓ 対応を適用して再検査</button>
       </div>
     </section>
 
-    <!-- 4) 部分的な検査（キーカラム突合 & 比較カラム対応） -->
-    <section class="card" id="partialCard" style="margin-top:16px; display:none">
-      <h3 style="margin-top:0">4) 部分的な検査（例：index と votes/raw_votes の一致）</h3>
+    <section class="card" id="partialCard" style="display:none">
+      <h3 style="margin-top:0; font-size: 18px;">4️⃣ 部分的な検査</h3>
       <p class="muted" style="margin-top:0">
-        先頭のファイルを<b>基準</b>として、同じキー（例：<code>index</code>）で行を突合し、選択した「比較カラム」（例：<code>raw_votes</code> と <code>votes</code>）の値が一致しているか検査します。<br>
-        ヘッダー行（1行目）が必要です。※「ヘッダー除外」をONにしていると使えません。
+        先頭のファイルを<b>基準</b>として、同じキー（例：<code>index</code>）で行を突合し、選択した「比較カラム」の値が一致しているか検査します。
       </p>
       <div id="partialConfig" class="grid-2"></div>
-      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+      <div style="margin-top:16px; display:flex; gap:12px; flex-wrap:wrap; align-items: center;">
         <label class="control" style="margin:0">
           <input type="checkbox" id="partialTrim" checked>
           <span>比較時に前後空白をトリム</span>
@@ -117,26 +438,25 @@
           <input type="checkbox" id="partialStrict" checked>
           <span>厳密一致（文字列完全一致）</span>
         </label>
-        <button id="runPartialBtn" class="btn">部分的検査を実行</button>
+        <button id="runPartialBtn" class="btn" style="background: linear-gradient(135deg, var(--accent) 0%, #6366f1 100%); color: white; border: none;">▶️ 部分的検査を実行</button>
       </div>
-      <div id="partialResult" style="margin-top:12px" class="muted">設定後に「部分的検査を実行」を押してください。</div>
+      <div id="partialResult" style="margin-top:16px" class="muted">設定後に「部分的検査を実行」を押してください。</div>
     </section>
 
-    <section class="card" style="margin-top:16px">
-      <h3 style="margin-top:0">詳細（不一致行 一覧）</h3>
+    <section class="card">
+      <h3 style="margin-top:0; font-size: 18px;">📋 詳細（不一致行 一覧）</h3>
       <div id="detailsWrap" class="muted">不一致がある場合、この下に <b>行そのもの</b> と <b>各ファイルでの出現回数</b> を一覧表示します。</div>
     </section>
 
-    <section class="card" style="margin-top:16px">
+    <section class="card">
       <details>
-        <summary>使い方 / 仕様</summary>
-        <ul>
+        <summary>📖 使い方 / 仕様</summary>
+        <ul style="margin-top: 12px; padding-left: 24px; color: var(--text-secondary); line-height: 1.8;">
           <li>2個以上のCSVに対応。<b>行の順序は無視</b>します。</li>
-          <li>「重複行の個数も比較」をONの場合、多重集合として一致（各行の出現回数が全ファイルで同じ）を判定。OFFの場合は集合比較（存在有無のみ）。</li>
-          <li>サイズ一致は「<b>総行数</b>（ヘッダー除外設定後）」「列数（各行の最大列数）」を参考に比較します。</li>
-          <li>部分一致を集計し、<b>一致していない行をすべて</b>表として出力します（各ファイルの出現回数も併記）。</li>
-          <li>ヘッダー不一致時は<b>手動カラム対応</b>が可能。さらに<b>部分的な検査</b>で、任意のキー＆比較カラムの一致を検査可能です。</li>
-          <li>CSVパースは <a href="https://www.papaparse.com/" target="_blank" rel="noreferrer">Papa Parse</a> を使用します（RFC4180準拠）。</li>
+          <li>「重複行の個数も比較」をONの場合、多重集合として一致を判定。</li>
+          <li>サイズ一致は「<b>総行数</b>」「列数」を参考に比較します。</li>
+          <li>ヘッダー不一致時は<b>手動カラム対応</b>が可能。</li>
+          <li>CSVパースは <a href="https://www.papaparse.com/" target="_blank" rel="noreferrer" style="color: var(--accent);">Papa Parse</a> を使用します。</li>
         </ul>
       </details>
     </section>
@@ -167,51 +487,41 @@
     const partialStrict = document.getElementById('partialStrict');
     const runPartialBtn = document.getElementById('runPartialBtn');
 
-    /** @type {File[]} */
     let files = [];
-    /** headers and raw rows **/
     let headersPerFile = [];
     let rawRowsPerFile = [];
-
-    /** column mapping state for header alignment **/
-    let columnMappings = {}; // fileIndex -> [sourceIdx per canonical order]
+    let columnMappings = {};
     let mappingActive = false;
-
     let lastReport = null;
 
-    // ---------- Utils ----------
-    function escapeHtml(s){
-      return String(s)
-        .replaceAll('&','&amp;')
-        .replaceAll('<','&lt;')
-        .replaceAll('>','&gt;');
+    function escapeHtml(s) {
+      return String(s).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
     }
-    function csvEscape(s){
+    function csvEscape(s) {
       const t = String(s);
       if (/[",\n]/.test(t)) return '"' + t.replace(/"/g, '""') + '"';
       return t;
     }
-    function norm(s, trim){ return trim ? String(s).trim() : String(s); }
-    const fmt = (n)=> new Intl.NumberFormat('ja-JP').format(n);
+    function norm(s, trim) { return trim ? String(s).trim() : String(s); }
+    const fmt = (n) => new Intl.NumberFormat('ja-JP').format(n);
 
-    // ---------- File UI ----------
-    function refreshList(){
+    function refreshList() {
       fileList.innerHTML = '';
       files.forEach((f, idx) => {
         const div = document.createElement('div');
         div.className = 'fileitem';
         const name = document.createElement('div');
-        name.innerHTML = `<b>${escapeHtml(f.name)}</b><br><small>${(f.size/1024).toFixed(1)} KB</small>`;
+        name.innerHTML = `<b>${escapeHtml(f.name)}</b><br><small>${(f.size / 1024).toFixed(1)} KB</small>`;
         const del = document.createElement('button');
         del.className = 'btn';
         del.textContent = '削除';
-        del.addEventListener('click', ()=>{ files.splice(idx,1); onFilesChanged(); });
+        del.addEventListener('click', () => { files.splice(idx, 1); onFilesChanged(); });
         div.appendChild(name); div.appendChild(del);
         fileList.appendChild(div);
       });
     }
 
-    function onFilesChanged(){
+    function onFilesChanged() {
       refreshList();
       analyzeBtn.disabled = files.length < 2;
       clearBtn.disabled = files.length === 0;
@@ -229,25 +539,24 @@
       partialResult.textContent = '設定後に「部分的検査を実行」を押してください。';
     }
 
-    fileInput.addEventListener('change', (e)=>{
+    fileInput.addEventListener('change', (e) => {
       files = files.concat(Array.from(e.target.files || []));
       onFilesChanged();
       fileInput.value = '';
     });
 
-    ;['dragenter','dragover'].forEach(ev=> dropzone.addEventListener(ev, (e)=>{ e.preventDefault(); e.stopPropagation(); dropzone.classList.add('dragover'); }));
-    ;['dragleave','drop'].forEach(ev=> dropzone.addEventListener(ev, (e)=>{ e.preventDefault(); e.stopPropagation(); dropzone.classList.remove('dragover'); }));
-    dropzone.addEventListener('drop', (e)=>{
-      const dropped = Array.from(e.dataTransfer.files || []).filter(f=>/\.csv$/i.test(f.name) || /text\//.test(f.type));
+    ;['dragenter', 'dragover'].forEach(ev => dropzone.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); dropzone.classList.add('dragover'); }));
+    ;['dragleave', 'drop'].forEach(ev => dropzone.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); dropzone.classList.remove('dragover'); }));
+    dropzone.addEventListener('drop', (e) => {
+      const dropped = Array.from(e.dataTransfer.files || []).filter(f => /\.csv$/i.test(f.name) || /text\//.test(f.type));
       files = files.concat(dropped);
       onFilesChanged();
     });
 
-    clearBtn.addEventListener('click', ()=>{ files = []; onFilesChanged(); });
+    clearBtn.addEventListener('click', () => { files = []; onFilesChanged(); });
 
-    skipHeader.addEventListener('change', ()=>{
-      if (skipHeader.checked){
-        // ヘッダー/部分検査は無効
+    skipHeader.addEventListener('change', () => {
+      if (skipHeader.checked) {
         colmapCard.style.display = 'none';
         colmapContainer.innerHTML = '';
         mappingActive = false;
@@ -256,21 +565,18 @@
       }
     });
 
-    // ---------- Core ----------
-    analyzeBtn.addEventListener('click', async ()=>{
+    analyzeBtn.addEventListener('click', async () => {
       summary.innerHTML = '解析中…';
       try {
         const parsed = await Promise.all(files.map(f => parseCsvFile(f)));
-        rawRowsPerFile = parsed.map(x=>x);
+        rawRowsPerFile = parsed.map(x => x);
         const cfg = { skipHeader: skipHeader.checked, trim: trimCells.checked, multiset: treatAsMultiset.checked };
 
-        // 抽出したヘッダー
         headersPerFile = parsed.map(rows => extractHeader(rows, { trim: cfg.trim }));
 
-        // ヘッダー不一致か判定（skipHeaderがOFFの時のみ）
         const headerCheck = (!cfg.skipHeader) && headersMismatch(headersPerFile);
-        if (headerCheck){
-          buildColumnMappingUI(headersPerFile, files.map(f=>f.name));
+        if (headerCheck) {
+          buildColumnMappingUI(headersPerFile, files.map(f => f.name));
           colmapCard.style.display = '';
         } else {
           colmapCard.style.display = 'none';
@@ -279,30 +585,28 @@
           columnMappings = {};
         }
 
-        // 部分的検査の設定UI（ヘッダーがあるときのみ）
-        if (!cfg.skipHeader && headersPerFile.length >= 2 && headersPerFile[0].length > 0){
-          buildPartialUI(headersPerFile, files.map(f=>f.name));
+        if (!cfg.skipHeader && headersPerFile.length >= 2 && headersPerFile[0].length > 0) {
+          buildPartialUI(headersPerFile, files.map(f => f.name));
           partialCard.style.display = '';
         } else {
           partialCard.style.display = 'none';
           partialConfig.innerHTML = '';
         }
 
-        // 正規化（必要ならマッピングを適用）
         const normalized = parsed.map((rows, i) => {
           const mapIdx = mappingActive ? (columnMappings[i] || null) : null;
           return normalizeRows(rows, cfg, mapIdx);
         });
-        const report = compareMany(normalized, files.map(f=>f.name), cfg);
+        const report = compareMany(normalized, files.map(f => f.name), cfg);
         renderReport(report);
 
-      } catch (err){
+      } catch (err) {
         console.error(err);
         summary.innerHTML = `<span class="bad">エラー: ${escapeHtml(String(err))}</span>`;
       }
     });
 
-    exportBtn.addEventListener('click', ()=>{
+    exportBtn.addEventListener('click', () => {
       if (!lastReport) return;
       const csv = exportMismatchesCsv(lastReport);
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -310,11 +614,11 @@
       a.href = URL.createObjectURL(blob);
       a.download = 'mismatches.csv';
       a.click();
-      setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     });
 
-    applyMappingBtn.addEventListener('click', ()=>{
-      if (!Object.keys(columnMappings).length){
+    applyMappingBtn.addEventListener('click', () => {
+      if (!Object.keys(columnMappings).length) {
         alert('カラム対応が設定されていません');
         return;
       }
@@ -322,35 +626,34 @@
       analyzeBtn.click();
     });
 
-    runPartialBtn.addEventListener('click', ()=>{
+    runPartialBtn.addEventListener('click', () => {
       try {
         const cfg = { trim: partialTrim.checked, strict: partialStrict.checked };
         const setup = readPartialSelection();
-        if (!setup){
+        if (!setup) {
           partialResult.innerHTML = '<span class="bad">部分的検査の設定が不完全です。</span>';
           return;
         }
         const result = runPartialCheck(setup, cfg);
         renderPartialResult(result);
-      } catch (e){
+      } catch (e) {
         console.error(e);
         partialResult.innerHTML = `<span class="bad">エラー: ${escapeHtml(String(e))}</span>`;
       }
     });
 
-    // ---------- Parsing & Normalization ----------
-    function parseCsvFile(file){
-      return new Promise((resolve, reject)=>{
+    function parseCsvFile(file) {
+      return new Promise((resolve, reject) => {
         Papa.parse(file, {
           skipEmptyLines: 'greedy',
           dynamicTyping: false,
-          complete: (res)=> resolve(res.data),
-          error: (err)=> reject(err)
+          complete: (res) => resolve(res.data),
+          error: (err) => reject(err)
         });
       });
     }
 
-    function extractHeader(rows, {trim}){
+    function extractHeader(rows, { trim }) {
       if (!rows || rows.length === 0) return [];
       const r0 = rows[0] || [];
       return r0.map(c => {
@@ -360,11 +663,11 @@
       });
     }
 
-    function normalizeRows(rows, {skipHeader, trim}, reorderIndices=null){
+    function normalizeRows(rows, { skipHeader, trim }, reorderIndices = null) {
       const out = [];
       const start = skipHeader ? 1 : 0;
       let minCols = Infinity, maxCols = 0;
-      for (let i=start; i<rows.length; i++){
+      for (let i = start; i < rows.length; i++) {
         let r = rows[i];
         if (!Array.isArray(r)) continue;
         let cells = r.map(c => {
@@ -372,7 +675,7 @@
           if (trim) s = s.trim();
           return s;
         });
-        if (Array.isArray(reorderIndices)){
+        if (Array.isArray(reorderIndices)) {
           const reordered = reorderIndices.map(idx => idx >= 0 ? (cells[idx] ?? '') : '');
           cells = reordered;
         }
@@ -380,25 +683,24 @@
         maxCols = Math.max(maxCols, cells.length);
         out.push(cells);
       }
-      if (minCols === Infinity){ minCols = 0; maxCols = 0; }
+      if (minCols === Infinity) { minCols = 0; maxCols = 0; }
       return { rows: out, minCols, maxCols };
     }
 
-    function rowKey(cells){
+    function rowKey(cells) {
       return cells.join('\u241F');
     }
 
-    function toFreqMap(rows){
+    function toFreqMap(rows) {
       const m = new Map();
-      for (const r of rows){
+      for (const r of rows) {
         const k = rowKey(r);
-        m.set(k, (m.get(k)||0) + 1);
+        m.set(k, (m.get(k) || 0) + 1);
       }
       return m;
     }
 
-    // ---------- Comparison & Report ----------
-    function compareMany(normalizedArray, filenames, {multiset}){
+    function compareMany(normalizedArray, filenames, { multiset }) {
       const files = normalizedArray.map((n, idx) => ({
         name: filenames[idx],
         rows: n.rows,
@@ -408,64 +710,63 @@
         freq: toFreqMap(n.rows)
       }));
 
-      const sizeSummary = files.map(f=>({ name:f.name, rows:f.totalRows, minCols:f.minCols, maxCols:f.maxCols }));
+      const sizeSummary = files.map(f => ({ name: f.name, rows: f.totalRows, minCols: f.minCols, maxCols: f.maxCols }));
 
       const allKeys = new Set();
-      for (const f of files){ for (const k of f.freq.keys()) allKeys.add(k); }
+      for (const f of files) { for (const k of f.freq.keys()) allKeys.add(k); }
 
       let fullyEqual = true;
       let commonCount = 0;
-      const perFileUnmatched = files.map(()=>0);
+      const perFileUnmatched = files.map(() => 0);
       const mismatchRows = [];
 
-      for (const k of allKeys){
+      for (const k of allKeys) {
         const counts = files.map(f => f.freq.get(k) || 0);
         const minCount = Math.min(...counts);
         const maxCount = Math.max(...counts);
-        if (multiset){
+        if (multiset) {
           commonCount += minCount;
-          counts.forEach((c, i)=>{ perFileUnmatched[i] += Math.max(0, c - minCount); });
+          counts.forEach((c, i) => { perFileUnmatched[i] += Math.max(0, c - minCount); });
           if (!(minCount === maxCount)) fullyEqual = false;
         } else {
-          const present = counts.map(c=>c>0);
+          const present = counts.map(c => c > 0);
           const allHave = present.every(Boolean);
           if (allHave) commonCount += 1;
-          counts.forEach((c, i)=>{ if (allHave) return; if (c>0) perFileUnmatched[i]+=1; });
+          counts.forEach((c, i) => { if (allHave) return; if (c > 0) perFileUnmatched[i] += 1; });
           if (!allHave) fullyEqual = false;
         }
         const allEqualCounts = counts.every(c => c === counts[0]);
-        if (!allEqualCounts){ mismatchRows.push({ key:k, counts, sample: k.split('\u241F') }); }
+        if (!allEqualCounts) { mismatchRows.push({ key: k, counts, sample: k.split('\u241F') }); }
       }
 
       const rowsAllSame = files.every(f => f.totalRows === files[0].totalRows);
       const colsAllSame = files.every(f => f.maxCols === files[0].maxCols && f.minCols === files[0].minCols);
-      if (fullyEqual){ if (!rowsAllSame) fullyEqual = false; }
+      if (fullyEqual) { if (!rowsAllSame) fullyEqual = false; }
 
       const unionSize = allKeys.size;
 
       return { config: { multiset }, files, sizeSummary, rowsAllSame, colsAllSame, fullyEqual, commonCount, unionSize, perFileUnmatched, mismatchRows };
     }
 
-    function renderReport(report){
+    function renderReport(report) {
       lastReport = report;
       const { sizeSummary, rowsAllSame, colsAllSame, fullyEqual, commonCount, unionSize, perFileUnmatched, files, mismatchRows, config } = report;
 
-      // 不一致時に各ファイルのカラム一覧を提示（ヘッダー有りの場合）
-      const colLists = (headersPerFile && headersPerFile.length>0) ? `
-        <details style="margin-top:8px">
+      const colLists = (headersPerFile && headersPerFile.length > 0) ? `
+        <details style="margin-top:12px">
           <summary>各ファイルのカラム一覧を表示</summary>
-          <div class="grid-2" style="margin-top:8px">
-            ${headersPerFile.map((h, i)=>`
-              <div class="card" style="padding:10px">
-                <div style="margin-bottom:6px"><b><code>${escapeHtml(files[i].name)}</code></b></div>
-                <div class="muted">${(h||[]).map(x=>`<code>${escapeHtml(x)}</code>`).join(' , ') || '(ヘッダーなし)'}</div>
+          <div class="grid-2" style="margin-top:12px">
+            ${headersPerFile.map((h, i) => `
+              <div class="card" style="padding:16px">
+                <div style="margin-bottom:8px"><b><code>${escapeHtml(files[i].name)}</code></b></div>
+                <div class="muted">${(h || []).map(x => `<code>${escapeHtml(x)}</code>`).join(' , ') || '(ヘッダーなし)'}</div>
               </div>
             `).join('')}
           </div>
         </details>` : '';
 
       const pills = [];
-      pills.push(`<span class="pill">モード: ${config.multiset ? '多重集合（重複数も比較）' : '集合（存在のみ）'}</span>`);
+      pills.push(`<span class="pill">モード: ${config.multiset ? '多重集合' : '集合'}</span>`);
       pills.push(`<span class="pill">ファイル数: ${files.length}</span>`);
       pills.push(`<span class="pill">共通行数: <b>${fmt(commonCount)}</b></span>`);
       if (!config.multiset) pills.push(`<span class="pill">行（ユニーク）全体: <b>${fmt(unionSize)}</b></span>`);
@@ -474,7 +775,7 @@
         <table>
           <thead><tr><th>ファイル</th><th>行数</th><th>列数（min / max）</th><th>不一致行（余剰）</th></tr></thead>
           <tbody>
-            ${sizeSummary.map((s, i)=>`
+            ${sizeSummary.map((s, i) => `
               <tr>
                 <td><code>${escapeHtml(s.name)}</code></td>
                 <td>${fmt(s.rows)}</td>
@@ -486,68 +787,66 @@
         </table>`;
 
       const status = fullyEqual
-        ? `<div class="good">✅ 完全一致：全ファイルの<b>全行（${config.multiset?'重複数も比較':''}</b>）が一致し、行数も一致しています。</div>`
-        : `<div class="bad">❌ 完全一致ではありません。</div>`;
+        ? `<div class="good" style="padding: 16px; background: var(--success-light); border-radius: 12px; border: 1px solid var(--success);">✅ 完全一致：全ファイルの<b>全行</b>が一致し、行数も一致しています。</div>`
+        : `<div class="bad" style="padding: 16px; background: var(--error-light); border-radius: 12px; border: 1px solid var(--error);">❌ 完全一致ではありません。</div>`;
 
       const sizeHints = `
-        <div style="margin-top:6px" class="muted">
-          <span class="pill ${rowsAllSame?'good':'bad'}">行数 ${rowsAllSame?'一致':'不一致'}</span>
-          <span class="pill ${colsAllSame?'good':'warn'}">列数（min/max） ${colsAllSame?'一致':'差あり（参考）'}</span>
+        <div style="margin-top:12px; display: flex; gap: 12px; flex-wrap: wrap;">
+          <span class="pill ${rowsAllSame ? 'good' : 'bad'}">行数 ${rowsAllSame ? '✓ 一致' : '✗ 不一致'}</span>
+          <span class="pill ${colsAllSame ? 'good' : 'warn'}">列数 ${colsAllSame ? '✓ 一致' : '△ 差あり'}</span>
         </div>`;
 
       summary.innerHTML = `
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">${pills.join('')}</div>
+        <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;">${pills.join('')}</div>
         ${status}
         ${sizeHints}
-        <div style="margin-top:10px">${sizeTable}</div>
+        <div style="margin-top:16px">${sizeTable}</div>
         ${fullyEqual ? '' : colLists}
-        <div style="margin-top:10px" class="muted">部分一致の集計：<b>共通行数 = ${fmt(commonCount)}</b>、各ファイルの「不一致行（余剰）」は表の右列をご参照ください。</div>
       `;
 
-      if (mismatchRows.length === 0){
-        detailsWrap.innerHTML = `<div class="good">不一致行はありません。</div>`;
+      if (mismatchRows.length === 0) {
+        detailsWrap.innerHTML = `<div class="good" style="padding: 16px; background: var(--success-light); border-radius: 12px; border: 1px solid var(--success);">✅ 不一致行はありません。</div>`;
         exportBtn.disabled = true;
         return;
       }
 
-      const header = `<thead><tr><th>行（セル一覧）</th>${files.map(f=>`<th>出現回数<br><code>${escapeHtml(f.name)}</code></th>`).join('')}</tr></thead>`;
+      const header = `<thead><tr><th>行（セル一覧）</th>${files.map(f => `<th>出現回数<br><code>${escapeHtml(f.name)}</code></th>`).join('')}</tr></thead>`;
       const body = mismatchRows.map(rec => {
         const rowHtml = `<code>${escapeHtml(rec.sample.join(' | '))}</code>`;
         const countsHtml = rec.counts.map(c => `<td>${fmt(c)}</td>`).join('');
         return `<tr><td>${rowHtml}</td>${countsHtml}</tr>`;
       }).join('');
 
-      detailsWrap.innerHTML = `<div style="overflow:auto; max-height: 560px; border:1px solid #1f2937; border-radius: 10px;"><table>${header}<tbody>${body}</tbody></table></div>`;
+      detailsWrap.innerHTML = `<div style="overflow:auto; max-height: 560px; border:1px solid var(--border); border-radius: 12px; margin-top: 12px;"><table>${header}<tbody>${body}</tbody></table></div>`;
       exportBtn.disabled = false;
     }
 
-    function exportMismatchesCsv(report){
-      const headers = ['cell_0','cell_1','cell_2','...'].concat(report.files.map(f=>`count__${f.name}`));
+    function exportMismatchesCsv(report) {
+      const headers = ['cell_0', 'cell_1', 'cell_2', '...'].concat(report.files.map(f => `count__${f.name}`));
       const lines = [];
       lines.push(headers.map(csvEscape).join(','));
-      for (const rec of report.mismatchRows){
+      for (const rec of report.mismatchRows) {
         const row = rec.sample.map(csvEscape);
-        const counts = rec.counts.map(n=>String(n));
+        const counts = rec.counts.map(n => String(n));
         lines.push(row.concat(counts).join(','));
       }
       return lines.join('\n');
     }
 
-    // ---------- Header mismatch helpers ----------
-    function headersMismatch(allHeaders){
+    function headersMismatch(allHeaders) {
       if (allHeaders.length < 2) return false;
       const ref = JSON.stringify(allHeaders[0] || []);
-      for (let i=1;i<allHeaders.length;i++){
+      for (let i = 1; i < allHeaders.length; i++) {
         if (JSON.stringify(allHeaders[i] || []) !== ref) return true;
       }
       return false;
     }
 
-    function buildColumnMappingUI(allHeaders, names){
+    function buildColumnMappingUI(allHeaders, names) {
       colmapContainer.innerHTML = '';
       columnMappings = {};
       mappingActive = false;
-      if (skipHeader.checked) return; // ヘッダーを使わない設定ならスキップ
+      if (skipHeader.checked) return;
 
       const canon = allHeaders[0] || [];
       const info = document.createElement('div');
@@ -555,10 +854,10 @@
       info.innerHTML = `基準ファイル: <code>${escapeHtml(names[0])}</code> のヘッダーを基準に、他ファイルの対応カラムを選択してください。`;
       colmapContainer.appendChild(info);
 
-      for (let i=1;i<allHeaders.length;i++){
+      for (let i = 1; i < allHeaders.length; i++) {
         const wrap = document.createElement('div');
         wrap.className = 'card';
-        wrap.style.padding = '12px';
+        wrap.style.padding = '16px';
         const title = document.createElement('div');
         title.innerHTML = `<b>対応指定: <code>${escapeHtml(names[i])}</code></b>`;
         wrap.appendChild(title);
@@ -569,11 +868,11 @@
         tbl.appendChild(thead);
         const tbody = document.createElement('tbody');
 
-        const options = (allHeaders[i] || []).map((h, idx)=>({label:h, idx}))
-          .concat([{label:'(空欄にする)', idx:-1}]);
+        const options = (allHeaders[i] || []).map((h, idx) => ({ label: h, idx }))
+          .concat([{ label: '(空欄にする)', idx: -1 }]);
 
         const mappingIdx = [];
-        canon.forEach((cname, cIdx)=>{
+        canon.forEach((cname, cIdx) => {
           const tr = document.createElement('tr');
           const tdL = document.createElement('td');
           tdL.innerHTML = `<code>${escapeHtml(cname)}</code>`;
@@ -584,19 +883,15 @@
             const o = document.createElement('option');
             o.value = String(opt.idx);
             o.textContent = opt.label;
-
-            // 🎨 ← ここでスタイルを個別指定
-            o.style.backgroundColor = '#0f172a';
-            o.style.color = '#e5e7eb';
-
+            o.style.backgroundColor = 'var(--bg-secondary)';
+            o.style.color = 'var(--text-primary)';
             sel.appendChild(o);
           });
-          // 既定：同名があれば同名、なければ同じインデックス、それもなければ-1
-          let pre = (allHeaders[i] || []).findIndex(h=>h===cname);
-          if (pre === -1) pre = cIdx < (allHeaders[i]||[]).length ? cIdx : -1;
+          let pre = (allHeaders[i] || []).findIndex(h => h === cname);
+          if (pre === -1) pre = cIdx < (allHeaders[i] || []).length ? cIdx : -1;
           sel.value = String(pre);
           mappingIdx[cIdx] = pre;
-          sel.addEventListener('change', ()=>{
+          sel.addEventListener('change', () => {
             mappingIdx[cIdx] = parseInt(sel.value, 10);
             columnMappings[i] = mappingIdx.slice();
           });
@@ -610,14 +905,12 @@
       }
     }
 
-    // ---------- Partial check UI & logic ----------
-    function buildPartialUI(allHeaders, names){
+    function buildPartialUI(allHeaders, names) {
       partialConfig.innerHTML = '';
-      // 先頭（基準）
       const ref = document.createElement('div');
       ref.className = 'card';
-      ref.style.padding = '12px';
-      ref.innerHTML = `<div style="margin-bottom:6px"><b>基準ファイル</b>: <code>${escapeHtml(names[0])}</code></div>`;
+      ref.style.padding = '16px';
+      ref.innerHTML = `<div style="margin-bottom:12px"><b>基準ファイル</b>: <code>${escapeHtml(names[0])}</code></div>`;
       const refKeySel = makeSelect(allHeaders[0], 'キー列（例: index）');
       const refValSel = makeSelect(allHeaders[0], '比較列（例: raw_votes）');
       ref.appendChild(refKeySel.wrap);
@@ -626,30 +919,23 @@
       ref.dataset.valSelId = refValSel.select.id;
       partialConfig.appendChild(ref);
 
-      // 初期推奨（index/raw_votesがあれば選択）
-      const refKeyIdx = (allHeaders[0]||[]).findIndex(h=>h==='index');
+      const refKeyIdx = (allHeaders[0] || []).findIndex(h => h === 'index');
       if (refKeyIdx >= 0) refKeySel.select.value = String(refKeyIdx);
-      const refValIdx = (allHeaders[0]||[]).findIndex(h=>h==='raw_votes');
+      const refValIdx = (allHeaders[0] || []).findIndex(h => h === 'raw_votes');
       if (refValIdx >= 0) refValSel.select.value = String(refValIdx);
 
-      // 他ファイル
-      for (let i=1;i<allHeaders.length;i++){
+      for (let i = 1; i < allHeaders.length; i++) {
         const blk = document.createElement('div');
         blk.className = 'card';
-        blk.style.padding = '12px';
-        blk.innerHTML = `<div style="margin-bottom:6px"><b>比較対象</b>: <code>${escapeHtml(names[i])}</code></div>`;
+        blk.style.padding = '16px';
+        blk.innerHTML = `<div style="margin-bottom:12px"><b>比較対象</b>: <code>${escapeHtml(names[i])}</code></div>`;
         const keySel = makeSelect(allHeaders[i], 'キー列');
         const valSel = makeSelect(allHeaders[i], '比較列');
 
-        // 初期値ヒューリスティクス
-        const idxCand = ['index','id','Idx','ID'];
-        const rk = (allHeaders[i]||[]).findIndex(h=> h==='index');
-        if (rk>=0) keySel.select.value = String(rk); else {
-          const k2 = (allHeaders[i]||[]).findIndex(h=> idxCand.includes(h));
-          if (k2>=0) keySel.select.value = String(k2);
-        }
-        const rv = (allHeaders[i]||[]).findIndex(h=> h==='votes' || h==='raw_votes');
-        if (rv>=0) valSel.select.value = String(rv);
+        const rk = (allHeaders[i] || []).findIndex(h => h === 'index');
+        if (rk >= 0) keySel.select.value = String(rk);
+        const rv = (allHeaders[i] || []).findIndex(h => h === 'votes' || h === 'raw_votes');
+        if (rv >= 0) valSel.select.value = String(rv);
 
         blk.appendChild(keySel.wrap);
         blk.appendChild(valSel.wrap);
@@ -660,7 +946,7 @@
       }
     }
 
-    function makeSelect(options, label){
+    function makeSelect(options, label) {
       const id = 'sel_' + Math.random().toString(36).slice(2);
       const wrap = document.createElement('div');
       wrap.className = 'control';
@@ -669,17 +955,17 @@
       lab.style.minWidth = '160px';
       const sel = document.createElement('select');
       sel.className = 'btn'; sel.id = id;
-      (options||[]).forEach((h, idx)=>{
+      (options || []).forEach((h, idx) => {
         const o = document.createElement('option');
         o.value = String(idx);
         o.textContent = h;
         sel.appendChild(o);
       });
       wrap.appendChild(lab); wrap.appendChild(sel);
-      return {wrap, select: sel};
+      return { wrap, select: sel };
     }
 
-    function readPartialSelection(){
+    function readPartialSelection() {
       if (skipHeader.checked) return null;
       if (headersPerFile.length < 2) return null;
       const blocks = Array.from(partialConfig.children);
@@ -688,77 +974,80 @@
       const refKeyIdx = parseInt(document.getElementById(refBlk.dataset.keySelId).value, 10);
       const refValIdx = parseInt(document.getElementById(refBlk.dataset.valSelId).value, 10);
       const targets = [];
-      for (let i=1;i<blocks.length;i++){
+      for (let i = 1; i < blocks.length; i++) {
         const b = blocks[i];
         const keyIdx = parseInt(document.getElementById(b.dataset.keySelId).value, 10);
         const valIdx = parseInt(document.getElementById(b.dataset.valSelId).value, 10);
         const fileIndex = parseInt(b.dataset.fileIndex, 10);
         targets.push({ fileIndex, keyIdx, valIdx });
       }
-      return { ref: { fileIndex:0, keyIdx:refKeyIdx, valIdx:refValIdx }, targets };
+      return { ref: { fileIndex: 0, keyIdx: refKeyIdx, valIdx: refValIdx }, targets };
     }
 
-    function runPartialCheck(setup, {trim, strict}){
-      // 参照マップ
+    function runPartialCheck(setup, { trim, strict }) {
       const refRows = rawRowsPerFile[setup.ref.fileIndex] || [];
       const refMap = new Map();
-      for (let i=1;i<refRows.length;i++){
+      for (let i = 1; i < refRows.length; i++) {
         const r = refRows[i]; if (!Array.isArray(r)) continue;
         const k = norm(String(r[setup.ref.keyIdx] ?? ''), trim);
         const v = norm(String(r[setup.ref.valIdx] ?? ''), trim);
         if (!refMap.has(k)) refMap.set(k, v);
       }
       const out = [];
-      for (const t of setup.targets){
+      for (const t of setup.targets) {
         const rows = rawRowsPerFile[t.fileIndex] || [];
-        let matched=0, mismatched=0, missing=0, extra=0;
+        let matched = 0, mismatched = 0, missing = 0, extra = 0;
         const mismatches = [];
         const seenKeys = new Set();
-        for (let i=1;i<rows.length;i++){
+        for (let i = 1; i < rows.length; i++) {
           const r = rows[i]; if (!Array.isArray(r)) continue;
           const k = norm(String(r[t.keyIdx] ?? ''), trim);
           const v = norm(String(r[t.valIdx] ?? ''), trim);
           seenKeys.add(k);
-          if (!refMap.has(k)){
-            extra++; // 相手にしかないキー
-            mismatches.push({ key:k, ref:'(なし)', other:v });
+          if (!refMap.has(k)) {
+            extra++;
+            mismatches.push({ key: k, ref: '(なし)', other: v });
           } else {
             const rv = refMap.get(k);
             const eq = strict ? v === rv : v == rv;
-            if (eq) matched++; else { mismatched++; mismatches.push({ key:k, ref:rv, other:v }); }
+            if (eq) matched++; else { mismatched++; mismatches.push({ key: k, ref: rv, other: v }); }
           }
         }
-        // 参照側にあるが相手にないキー
-        for (const k of refMap.keys()){
-          if (!seenKeys.has(k)){
+        for (const k of refMap.keys()) {
+          if (!seenKeys.has(k)) {
             missing++;
-            mismatches.push({ key:k, ref:refMap.get(k), other:'(なし)' });
+            mismatches.push({ key: k, ref: refMap.get(k), other: '(なし)' });
           }
         }
-        out.push({ fileIndex:t.fileIndex, matched, mismatched, missing, extra, mismatches });
+        out.push({ fileIndex: t.fileIndex, matched, mismatched, missing, extra, mismatches });
       }
       return out;
     }
 
-    function renderPartialResult(results){
-      const names = files.map(f=>f.name);
+    function renderPartialResult(results) {
+      const names = files.map(f => f.name);
       const refName = names[0];
       const header = `
         <div class="pill">基準: <code>${escapeHtml(refName)}</code></div>
-        <div class="muted" style="margin-top:6px">一致=キーがあり値も一致 / 不一致=キーはあるが値が異なる / missing=基準にのみ存在 / extra=比較側にのみ存在</div>
+        <div class="muted" style="margin-top:12px">一致=キーがあり値も一致 / 不一致=キーはあるが値が異なる / missing=基準にのみ存在 / extra=比較側にのみ存在</div>
       `;
-      const tables = results.map(r=>{
+      const tables = results.map(r => {
         const fname = names[r.fileIndex];
-        const sum = `<div style="margin:6px 0" class="muted">一致: <b>${fmt(r.matched)}</b> / 不一致: <b>${fmt(r.mismatched)}</b> / missing: <b>${fmt(r.missing)}</b> / extra: <b>${fmt(r.extra)}</b></div>`;
-        const rows = r.mismatches.map(x=>`<tr><td><code>${escapeHtml(x.key)}</code></td><td><code>${escapeHtml(x.ref)}</code></td><td><code>${escapeHtml(x.other)}</code></td></tr>`).join('');
+        const sum = `<div style="margin:12px 0; display: flex; gap: 12px; flex-wrap: wrap;">
+          <span class="pill good">一致: <b>${fmt(r.matched)}</b></span>
+          <span class="pill bad">不一致: <b>${fmt(r.mismatched)}</b></span>
+          <span class="pill warn">missing: <b>${fmt(r.missing)}</b></span>
+          <span class="pill warn">extra: <b>${fmt(r.extra)}</b></span>
+        </div>`;
+        const rows = r.mismatches.map(x => `<tr><td><code>${escapeHtml(x.key)}</code></td><td><code>${escapeHtml(x.ref)}</code></td><td><code>${escapeHtml(x.other)}</code></td></tr>`).join('');
         const table = `
-          <div class="card" style="padding:12px; margin-top:8px">
-            <div><b>比較対象:</b> <code>${escapeHtml(fname)}</code></div>
+          <div class="card" style="padding:16px; margin-top:12px">
+            <div style="margin-bottom: 8px;"><b>比較対象:</b> <code>${escapeHtml(fname)}</code></div>
             ${sum}
-            <div style="overflow:auto; max-height: 420px; border:1px solid #1f2937; border-radius: 10px;">
+            <div style="overflow:auto; max-height: 420px; border:1px solid var(--border); border-radius: 12px;">
               <table>
                 <thead><tr><th>key</th><th>${escapeHtml(refName)} 値</th><th>${escapeHtml(fname)} 値</th></tr></thead>
-                <tbody>${rows || '<tr><td colspan="3" class="muted">差分はありません。</td></tr>'}</tbody>
+                <tbody>${rows || '<tr><td colspan="3" class="muted" style="text-align: center; padding: 20px;">差分はありません。</td></tr>'}</tbody>
               </table>
             </div>
           </div>`;
@@ -767,8 +1056,8 @@
       partialResult.innerHTML = header + tables;
     }
 
-    // ---------- Init ----------
     onFilesChanged();
   </script>
 </body>
+
 </html>

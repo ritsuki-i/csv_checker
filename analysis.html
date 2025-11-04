@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV相関・分布分析</title>
+
+    <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+    <script src="https://unpkg.com/simple-statistics@7.8.3/dist/simple-statistics.min.js"></script>
+
+    <style>
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-secondary: #111827;
+            --bg-tertiary: #1a1f35;
+            --border: #2d3548;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --accent-light: rgba(59, 130, 246, 0.1);
+            --success: #10b981;
+            --success-light: rgba(16, 185, 129, 0.1);
+            --error: #ef4444;
+            --error-light: rgba(239, 68, 68, 0.1);
+            --warning: #f59e0b;
+            --warning-light: rgba(245, 158, 11, 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans JP", "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #0a0e1a 0%, #1a1f35 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        header {
+            padding: 24px 32px;
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            backdrop-filter: blur(12px);
+            background: rgba(10, 14, 26, 0.8);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header-link {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, var(--accent) 0%, #6366f1 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+            white-space: nowrap;
+        }
+
+        .header-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+        }
+
+        #main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 24px 80px;
+        }
+
+        h2, h3 {
+            color: var(--text-primary);
+            margin-bottom: 16px;
+        }
+
+        h2 {
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        h3 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        #controls-container {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        @media (min-width: 1024px) {
+            #controls-container {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        .control-box {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 28px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+            transition: all 0.3s ease;
+        }
+
+        .control-box:hover {
+            border-color: rgba(59, 130, 246, 0.3);
+            box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+        }
+
+        .control-box h3 {
+            margin-top: 0;
+            margin-bottom: 20px;
+        }
+
+        label {
+            font-weight: 600;
+            display: block;
+            margin-top: 16px;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        select, input[type="file"] {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-size: 14px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        select:hover, input[type="file"]:hover {
+            border-color: var(--accent);
+            background: var(--accent-light);
+        }
+
+        select:focus, input[type="file"]:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-light);
+        }
+
+        select option {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+
+        #analyzeButton {
+            width: 100%;
+            padding: 16px;
+            font-size: 16px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+            margin-top: 8px;
+        }
+
+        #analyzeButton:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+        }
+
+        #analyzeButton:disabled {
+            background: var(--bg-tertiary);
+            color: var(--text-muted);
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        
+        #results-container {
+            margin-top: 32px;
+        }
+        
+        #error-container {
+            display: none;
+            background: var(--error-light);
+            border: 1px solid var(--error);
+            color: var(--error);
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 24px;
+        }
+
+        #error-container h4 {
+            margin-bottom: 12px;
+            font-size: 16px;
+        }
+
+        #error-container pre {
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+            background: var(--bg-secondary);
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: var(--text-primary);
+        }
+
+        #success-container {
+            display: none;
+            background: var(--success-light);
+            border: 1px solid var(--success);
+            color: var(--success);
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            font-weight: 600;
+            margin-bottom: 24px;
+            font-size: 15px;
+        }
+        
+        #stats-container {
+            display: none;
+            grid-template-columns: 1fr;
+            gap: 24px;
+            margin: 24px 0;
+        }
+
+        @media (min-width: 768px) {
+            #stats-container {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        .stat-box {
+            text-align: center;
+            padding: 32px 24px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+            transition: all 0.3s ease;
+        }
+
+        .stat-box:hover {
+            border-color: var(--accent);
+            transform: translateY(-4px);
+            box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+        }
+
+        .stat-box .value {
+            font-size: 48px;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .stat-box .label {
+            font-size: 14px;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        #plots-container {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 24px;
+        }
+
+        @media (min-width: 1024px) {
+            #plots-container {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        .plot-box {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+            min-height: 400px;
+        }
+
+        #scatter {
+            grid-column: 1 / -1;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .control-box, .stat-box, .plot-box {
+            animation: fadeIn 0.5s ease;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>📈 CSV相関・分布分析</h1>
+        <a href="index.html" class="header-link">← 差分チェッカーへ</a>
+    </header>
+
+    <div id="main-container">
+        <div id="controls-container">
+            <div class="control-box">
+                <h3>📁 CSVファイル 1</h3>
+                <input type="file" id="csvFile1" accept=".csv">
+                <label for="indexCol1">Index (キー) カラム:</label>
+                <select id="indexCol1"></select>
+                <label for="targetCol1">分析対象カラム:</label>
+                <select id="targetCol1"></select>
+            </div>
+            <div class="control-box">
+                <h3>📁 CSVファイル 2</h3>
+                <input type="file" id="csvFile2" accept=".csv">
+                <label for="indexCol2">Index (キー) カラム:</label>
+                <select id="indexCol2"></select>
+                <label for="targetCol2">分析対象カラム:</label>
+                <select id="targetCol2"></select>
+            </div>
+        </div>
+        
+        <button id="analyzeButton">🔍 分析を実行</button>
+        
+        <div id="results-container">
+            <div id="error-container">
+                <h4>⚠️ エラー</h4>
+                <pre id="error-details"></pre>
+            </div>
+            <div id="success-container"></div>
+            
+            <div id="stats-container">
+                <div class="stat-box">
+                    <div id="pearson-value" class="value"></div>
+                    <div class="label">ピアソン相関係数</div>
+                </div>
+                <div class="stat-box">
+                    <div id="spearman-value" class="value"></div>
+                    <div class="label">スピアマン順位相関係数</div>
+                </div>
+            </div>
+            
+            <div id="plots-container">
+                <div id="hist1" class="plot-box"></div>
+                <div id="hist2" class="plot-box"></div>
+                <div id="scatter" class="plot-box"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let data1 = null;
+        let data2 = null;
+
+        const csvFile1 = document.getElementById('csvFile1');
+        const indexCol1 = document.getElementById('indexCol1');
+        const targetCol1 = document.getElementById('targetCol1');
+        
+        const csvFile2 = document.getElementById('csvFile2');
+        const indexCol2 = document.getElementById('indexCol2');
+        const targetCol2 = document.getElementById('targetCol2');
+        
+        const analyzeButton = document.getElementById('analyzeButton');
+        
+        const errorContainer = document.getElementById('error-container');
+        const errorDetails = document.getElementById('error-details');
+        const successContainer = document.getElementById('success-container');
+        const statsContainer = document.getElementById('stats-container');
+        const plotsContainer = document.getElementById('plots-container');
+        
+        const pearsonVal = document.getElementById('pearson-value');
+        const spearmanVal = document.getElementById('spearman-value');
+
+        csvFile1.addEventListener('change', (e) => {
+            handleFileSelect(e.target.files[0], 1, indexCol1, targetCol1);
+        });
+
+        csvFile2.addEventListener('change', (e) => {
+            handleFileSelect(e.target.files[0], 2, indexCol2, targetCol2);
+        });
+        
+        analyzeButton.addEventListener('click', runAnalysis);
+
+        function handleFileSelect(file, fileNum, indexSelect, targetSelect) {
+            if (!file) return;
+
+            if (fileNum === 1) { data1 = null; }
+            if (fileNum === 2) { data2 = null; }
+            
+            indexSelect.innerHTML = '<option value="">読み込み中...</option>';
+            targetSelect.innerHTML = '<option value="">読み込み中...</option>';
+            
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                
+                complete: (results) => {
+                    if (fileNum === 1) {
+                        data1 = results.data;
+                    } else {
+                        data2 = results.data;
+                    }
+                    
+                    const headers = results.meta.fields;
+                    
+                    if (!headers || headers.length === 0 || (headers.length === 1 && headers[0] === "")) {
+                        alert(`ファイル${fileNum} のヘッダー（カラム名）が読み込めませんでした。\n\n[確認事項]\n1. CSVファイルの1行目はヘッダー行ですか？\n2. ファイルの文字コードはUTF-8ですか？`);
+                        indexSelect.innerHTML = '<option value="">読込失敗</option>';
+                        targetSelect.innerHTML = '<option value="">読込失敗</option>';
+                        return;
+                    }
+                    
+                    indexSelect.innerHTML = '';
+                    targetSelect.innerHTML = '';
+                    
+                    headers.forEach((header, i) => {
+                        if (header) { 
+                            const option1 = new Option(header, header);
+                            const option2 = new Option(header, header);
+                            indexSelect.add(option1);
+                            targetSelect.add(option2);
+                        }
+                    });
+                    
+                    if (indexSelect.options.length > 0) {
+                        indexSelect.selectedIndex = 0;
+                        targetSelect.selectedIndex = Math.min(1, indexSelect.options.length - 1);
+                    } else {
+                        alert(`ファイル${fileNum} から有効なカラム名を検出できませんでした。`);
+                        indexSelect.innerHTML = '<option value="">読込失敗</option>';
+                        targetSelect.innerHTML = '<option value="">読込失敗</option>';
+                    }
+                },
+                error: (err) => {
+                    alert(`ファイル${fileNum}の読み込みに失敗しました: ${err.message}`);
+                    indexSelect.innerHTML = '<option value="">読込失敗</option>';
+                    targetSelect.innerHTML = '<option value="">読込失敗</option>';
+                }
+            });
+        }
+
+        function runAnalysis() {
+            analyzeButton.disabled = true;
+            analyzeButton.textContent = '分析中...';
+            
+            clearResults();
+
+            if (!data1 || !data2) {
+                showError("ファイル1とファイル2の両方をアップロードしてください。");
+                resetButton();
+                return;
+            }
+
+            const idxColName1 = indexCol1.value;
+            const tgtColName1 = targetCol1.value;
+            const idxColName2 = indexCol2.value;
+            const tgtColName2 = targetCol2.value;
+
+            if (!idxColName1 || !tgtColName1 || !idxColName2 || !tgtColName2) {
+                showError("両方のファイルで、Indexカラムと分析対象カラムを選択してください。");
+                resetButton();
+                return;
+            }
+
+            const map1 = new Map();
+            const map2 = new Map();
+            
+            try {
+                data1.forEach(row => {
+                    if (row[idxColName1] !== undefined) map1.set(row[idxColName1], row[tgtColName1]);
+                });
+                data2.forEach(row => {
+                    if (row[idxColName2] !== undefined) map2.set(row[idxColName2], row[tgtColName2]);
+                });
+            } catch (e) {
+                showError(`カラム名の処理中にエラーが発生しました: ${e.message}`);
+                resetButton();
+                return;
+            }
+            
+            const keys1 = new Set(map1.keys());
+            const keys2 = new Set(map2.keys());
+
+            const missingIn2 = [...keys1].filter(k => !keys2.has(k));
+            const missingIn1 = [...keys2].filter(k => !keys1.has(k));
+
+            if (missingIn1.length > 0 || missingIn2.length > 0) {
+                let errorMsg = "エラー: 2つのCSVでIndexが完全に一致しませんでした。\n\n";
+                if (missingIn2.length > 0) {
+                    errorMsg += `ファイル1にのみ存在するIndex（${missingIn2.length}件）:\n${missingIn2.slice(0, 100).join(', ')}`;
+                    if (missingIn2.length > 100) errorMsg += ", ...";
+                    errorMsg += "\n\n";
+                }
+                if (missingIn1.length > 0) {
+                    errorMsg += `ファイル2にのみ存在するIndex（${missingIn1.length}件）:\n${missingIn1.slice(0, 100).join(', ')}`;
+                    if (missingIn1.length > 100) errorMsg += ", ...";
+                }
+                showError(errorMsg);
+                resetButton();
+                return;
+            }
+            
+            showSuccess(`✅ Indexは完全に一致しました。（${keys1.size}件）`);
+
+            const values1 = [];
+            const values2 = [];
+            const labels = [];
+
+            for (const key of keys1) {
+                const val1 = parseFloat(map1.get(key));
+                const val2 = parseFloat(map2.get(key));
+                
+                if (!isNaN(val1) && !isNaN(val2)) {
+                    values1.push(val1);
+                    values2.push(val2);
+                    labels.push(key);
+                }
+            }
+
+            if (values1.length === 0) {
+                showError("分析対象のカラムに、比較可能な数値データが見つかりませんでした。");
+                resetButton();
+                return;
+            }
+            
+            try {
+                const pearson = ss.sampleCorrelation(values1, values2).toFixed(4);
+                const spearman = ss.spearmanRankCorrelation(values1, values2).toFixed(4);
+                
+                pearsonVal.textContent = pearson;
+                spearmanVal.textContent = spearman;
+                statsContainer.style.display = 'grid';
+            
+            } catch(e) {
+                showError(`統計計算中にエラーが発生しました: ${e.message}`);
+                resetButton();
+                return;
+            }
+
+            try {
+                const traceHist1 = {
+                    x: values1,
+                    type: 'histogram',
+                    name: tgtColName1,
+                    marker: { color: '#3b82f6' },
+                    opacity: 0.8
+                };
+                const layoutHist1 = {
+                    title: {
+                        text: `<b>${tgtColName1} (File 1) の分布</b>`,
+                        font: { color: '#f1f5f9' }
+                    },
+                    xaxis: { title: tgtColName1, color: '#94a3b8' },
+                    yaxis: { title: '頻度', color: '#94a3b8' },
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    plot_bgcolor: 'rgba(0,0,0,0)',
+                    font: { color: '#94a3b8' }
+                };
+                Plotly.newPlot('hist1', [traceHist1], layoutHist1, {responsive: true});
+
+                const traceHist2 = {
+                    x: values2,
+                    type: 'histogram',
+                    name: tgtColName2,
+                    marker: { color: '#10b981' },
+                    opacity: 0.8
+                };
+                const layoutHist2 = {
+                    title: {
+                        text: `<b>${tgtColName2} (File 2) の分布</b>`,
+                        font: { color: '#f1f5f9' }
+                    },
+                    xaxis: { title: tgtColName2, color: '#94a3b8' },
+                    yaxis: { title: '頻度', color: '#94a3b8' },
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    plot_bgcolor: 'rgba(0,0,0,0)',
+                    font: { color: '#94a3b8' }
+                };
+                Plotly.newPlot('hist2', [traceHist2], layoutHist2, {responsive: true});
+
+                const traceScatter = {
+                    x: values1,
+                    y: values2,
+                    text: labels,
+                    mode: 'markers',
+                    type: 'scatter',
+                    marker: { color: '#8b5cf6', size: 8, opacity: 0.7 }
+                };
+                const layoutScatter = {
+                    title: {
+                        text: `<b>${tgtColName1} vs ${tgtColName2} の散布図</b>`,
+                        font: { color: '#f1f5f9' }
+                    },
+                    xaxis: { title: `${tgtColName1} (File 1)`, color: '#94a3b8' },
+                    yaxis: { title: `${tgtColName2} (File 2)`, color: '#94a3b8' },
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    plot_bgcolor: 'rgba(0,0,0,0)',
+                    font: { color: '#94a3b8' }
+                };
+                Plotly.newPlot('scatter', [traceScatter], layoutScatter, {responsive: true});
+
+                plotsContainer.style.display = 'grid';
+
+            } catch (e) {
+                showError(`グラフ描画中にエラーが発生しました: ${e.message}`);
+            }
+
+            resetButton();
+        }
+
+        function clearResults() {
+            errorContainer.style.display = 'none';
+            successContainer.style.display = 'none';
+            errorDetails.textContent = '';
+            
+            statsContainer.style.display = 'none';
+            pearsonVal.textContent = '';
+            spearmanVal.textContent = '';
+            
+            Plotly.purge('hist1');
+            Plotly.purge('hist2');
+            Plotly.purge('scatter');
+        }
+
+        function resetButton() {
+            analyzeButton.disabled = false;
+            analyzeButton.textContent = '🔍 分析を実行';
+        }
+
+        function showError(message) {
+            errorDetails.textContent = message;
+            errorContainer.style.display = 'block';
+        }
+        
+        function showSuccess(message) {
+            successContainer.textContent = message;
+            successContainer.style.display = 'block';
+        }
+
+    </script>
+</body>
+</html>

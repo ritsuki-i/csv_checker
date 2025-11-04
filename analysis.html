@@ -314,6 +314,35 @@
 
         #scatter {
             grid-column: 1 / -1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: auto;
+        }
+
+        .swap-button {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, var(--accent) 0%, #6366f1 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+            margin-bottom: 16px;
+        }
+
+        .swap-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+        }
+
+        .scatter-controls {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 16px;
         }
 
         @keyframes fadeIn {
@@ -383,6 +412,12 @@
     <script>
         let data1 = null;
         let data2 = null;
+        let isAxisSwapped = false;
+        let currentValues1 = [];
+        let currentValues2 = [];
+        let currentLabels = [];
+        let currentColName1 = '';
+        let currentColName2 = '';
 
         const csvFile1 = document.getElementById('csvFile1');
         const indexCol1 = document.getElementById('indexCol1');
@@ -412,6 +447,54 @@
         });
         
         analyzeButton.addEventListener('click', runAnalysis);
+
+        function calculateSpearman_AverageRank(x, y) {
+            // 1. [value, original_index] のペアを作成
+            const xPairs = x.map((value, index) => [value, index]);
+            const yPairs = y.map((value, index) => [value, index]);
+
+            // 2. 値でソート
+            xPairs.sort((a, b) => a[0] - b[0]);
+            yPairs.sort((a, b) => a[0] - b[0]);
+
+            // 3. ランク配列を作成 (元のインデックスの場所に対応するランクを入れる)
+            const xRanks = new Array(x.length);
+            const yRanks = new Array(y.length);
+
+            // 4. 同順位（Ties）を平均ランクで処理
+            
+            // xRanksの処理
+            for (let i = 0; i < xPairs.length;) {
+                let j = i;
+                // 同じ値が続く限りjを増やす
+                while (j < xPairs.length - 1 && xPairs[j][0] === xPairs[j + 1][0]) {
+                    j++;
+                }
+                
+                // i から j までが同順位
+                const rank = (i + 1 + j + 1) / 2; // 平均ランク (例: 1位と2位なら (1+2)/2 = 1.5)
+                for (let k = i; k <= j; k++) {
+                    xRanks[xPairs[k][1]] = rank; // 元のインデックス位置にランクを格納
+                }
+                i = j + 1;
+            }
+
+            // yRanksの処理
+            for (let i = 0; i < yPairs.length;) {
+                let j = i;
+                while (j < yPairs.length - 1 && yPairs[j][0] === yPairs[j + 1][0]) {
+                    j++;
+                }
+                const rank = (i + 1 + j + 1) / 2;
+                for (let k = i; k <= j; k++) {
+                    yRanks[yPairs[k][1]] = rank;
+                }
+                i = j + 1;
+            }
+
+            // 5. ランク配列に対してピアソン相関 (ss.sampleCorrelation) を計算
+            return ss.sampleCorrelation(xRanks, yRanks);
+        }
 
         function handleFileSelect(file, fileNum, indexSelect, targetSelect) {
             if (!file) return;
@@ -476,6 +559,7 @@
             analyzeButton.textContent = '分析中...';
             
             clearResults();
+            isAxisSwapped = false;
 
             if (!data1 || !data2) {
                 showError("ファイル1とファイル2の両方をアップロードしてください。");
@@ -537,10 +621,59 @@
             const values1 = [];
             const values2 = [];
             const labels = [];
+            let conversionErrors = 0;
+
+            function cleanAndParseFloat(str, colName) {
+                if (typeof str !== 'string') {
+                    if (typeof str === 'number') return str;
+                    return NaN;
+                }
+                
+                let cleanedStr = str.trim();
+
+                if (cleanedStr.startsWith('"') && cleanedStr.endsWith('"')) {
+                    cleanedStr = cleanedStr.substring(1, cleanedStr.length - 1).trim();
+                }
+                
+                if (cleanedStr.startsWith('[') && cleanedStr.endsWith(']')) {
+                    try {
+                        const arrStr = cleanedStr.substring(1, cleanedStr.length - 1);
+                        const counts = arrStr.split(',').map(s => parseFloat(s.trim()) || 0);
+                        
+                        const total = counts.reduce((sum, val) => sum + val, 0);
+                        if (total === 0) {
+                            return 0;
+                        }
+                        
+                        let entropy = 0;
+                        for (const count of counts) {
+                            if (count > 0) {
+                                const p = count / total;
+                                entropy -= p * Math.log2(p);
+                            }
+                        }
+                        return entropy;
+                        
+                    } catch (e) {
+                        return NaN;
+                    }
+                }
+                
+                cleanedStr = cleanedStr.replace(/[¥$€,]/g, '');
+
+                if (cleanedStr.startsWith('(') && cleanedStr.endsWith(')')) {
+                    cleanedStr = '-' + cleanedStr.substring(1, cleanedStr.length - 1);
+                }
+
+                return parseFloat(cleanedStr);
+            }
 
             for (const key of keys1) {
-                const val1 = parseFloat(map1.get(key));
-                const val2 = parseFloat(map2.get(key));
+                const rawVal1 = map1.get(key);
+                const rawVal2 = map2.get(key);
+
+                const val1 = cleanAndParseFloat(rawVal1);
+                const val2 = cleanAndParseFloat(rawVal2);
                 
                 if (!isNaN(val1) && !isNaN(val2)) {
                     values1.push(val1);
@@ -555,9 +688,15 @@
                 return;
             }
             
+            currentValues1 = values1;
+            currentValues2 = values2;
+            currentLabels = labels;
+            currentColName1 = tgtColName1;
+            currentColName2 = tgtColName2;
+            
             try {
                 const pearson = ss.sampleCorrelation(values1, values2).toFixed(4);
-                const spearman = ss.spearmanRankCorrelation(values1, values2).toFixed(4);
+                const spearman = calculateSpearman_AverageRank(values1, values2).toFixed(4); 
                 
                 pearsonVal.textContent = pearson;
                 spearmanVal.textContent = spearman;
@@ -610,26 +749,7 @@
                 };
                 Plotly.newPlot('hist2', [traceHist2], layoutHist2, {responsive: true});
 
-                const traceScatter = {
-                    x: values1,
-                    y: values2,
-                    text: labels,
-                    mode: 'markers',
-                    type: 'scatter',
-                    marker: { color: '#8b5cf6', size: 8, opacity: 0.7 }
-                };
-                const layoutScatter = {
-                    title: {
-                        text: `<b>${tgtColName1} vs ${tgtColName2} の散布図</b>`,
-                        font: { color: '#f1f5f9' }
-                    },
-                    xaxis: { title: `${tgtColName1} (File 1)`, color: '#94a3b8' },
-                    yaxis: { title: `${tgtColName2} (File 2)`, color: '#94a3b8' },
-                    paper_bgcolor: 'rgba(0,0,0,0)',
-                    plot_bgcolor: 'rgba(0,0,0,0)',
-                    font: { color: '#94a3b8' }
-                };
-                Plotly.newPlot('scatter', [traceScatter], layoutScatter, {responsive: true});
+                drawScatterPlot();
 
                 plotsContainer.style.display = 'grid';
 
@@ -639,6 +759,73 @@
 
             resetButton();
         }
+
+        function drawScatterPlot() {
+            const scatterDiv = document.getElementById('scatter');
+            
+            if (!document.getElementById('swapAxisButton')) {
+                const controlsDiv = document.createElement('div');
+                controlsDiv.className = 'scatter-controls';
+                controlsDiv.innerHTML = '<button id="swapAxisButton" class="swap-button">🔄 X軸とY軸を入れ替え</button>';
+                scatterDiv.insertBefore(controlsDiv, scatterDiv.firstChild);
+                
+                document.getElementById('swapAxisButton').addEventListener('click', swapAxes);
+            }
+            
+            const maxSize = Math.min(
+                window.innerWidth * 0.85,
+                window.innerHeight * 0.7
+            );
+            const size = Math.min(maxSize, 800);
+            
+            const xData = isAxisSwapped ? currentValues2 : currentValues1;
+            const yData = isAxisSwapped ? currentValues1 : currentValues2;
+            const xLabel = isAxisSwapped ? currentColName2 : currentColName1;
+            const yLabel = isAxisSwapped ? currentColName1 : currentColName2;
+            const xFile = isAxisSwapped ? 'File 2' : 'File 1';
+            const yFile = isAxisSwapped ? 'File 1' : 'File 2';
+            
+            const traceScatter = {
+                x: xData,
+                y: yData,
+                text: currentLabels,
+                mode: 'markers',
+                type: 'scatter',
+                marker: { color: '#8b5cf6', size: 8, opacity: 0.7 }
+            };
+            
+            const layoutScatter = {
+                title: {
+                    text: `<b>${xLabel} vs ${yLabel} の散布図</b>`,
+                    font: { color: '#f1f5f9' }
+                },
+                xaxis: { title: `${xLabel} (${xFile})`, color: '#94a3b8' },
+                yaxis: { 
+                    title: `${yLabel} (${yFile})`, 
+                    color: '#94a3b8',
+                    scaleanchor: 'x',
+                    scaleratio: 1
+                },
+                width: size,
+                height: size,
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                font: { color: '#94a3b8' }
+            };
+            
+            Plotly.newPlot('scatter', [traceScatter], layoutScatter, {responsive: true});
+        }
+        
+        function swapAxes() {
+            isAxisSwapped = !isAxisSwapped;
+            drawScatterPlot();
+        }
+        
+        window.addEventListener('resize', () => {
+            if (currentValues1.length > 0) {
+                drawScatterPlot();
+            }
+        });
 
         function clearResults() {
             errorContainer.style.display = 'none';
@@ -652,6 +839,11 @@
             Plotly.purge('hist1');
             Plotly.purge('hist2');
             Plotly.purge('scatter');
+            
+            const swapButton = document.getElementById('swapAxisButton');
+            if (swapButton) {
+                swapButton.parentElement.remove();
+            }
         }
 
         function resetButton() {

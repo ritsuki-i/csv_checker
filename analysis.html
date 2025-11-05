@@ -353,12 +353,155 @@
         .control-box, .stat-box, .plot-box {
             animation: fadeIn 0.5s ease;
         }
+
+        /* Modal styles - adjusted for larger image and smaller histograms */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 200;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.7);
+            backdrop-filter: blur(5px);
+            animation: fadeIn 0.3s ease;
+        }
+        .modal-content {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border);
+            margin: 3% auto;
+            padding: 24px;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 1100px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+        .modal-close {
+            color: var(--text-muted);
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            line-height: 1;
+        }
+        .modal-close:hover {
+            color: var(--text-primary);
+        }
+        #modal-title {
+            margin-top: 0;
+            margin-bottom: 20px;
+            color: var(--accent);
+            font-size: 20px;
+            word-break: break-all;
+        }
+        
+        /* Modal body layout - image gets more space (2fr vs 1fr) */
+        .modal-body {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 24px;
+            grid-template-areas:
+                "image dist1"
+                "image dist2";
+        }
+        .modal-image-container {
+            grid-area: image;
+            background: var(--bg-tertiary);
+            padding: 16px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-image-container h4 {
+            margin-top: 0;
+            margin-bottom: 12px;
+            font-size: 14px;
+            color: var(--text-secondary);
+            text-align: left;
+            width: 100%;
+        }
+        .modal-image-container img {
+            max-width: 100%;
+            height: 500px;
+            width: auto;
+            border-radius: 8px;
+            background: var(--bg-secondary);
+            object-fit: contain;
+        }
+
+        /* Plot containers */
+        .modal-plot-container {
+            background: var(--bg-tertiary);
+            padding: 16px;
+            border-radius: 8px;
+        }
+        .modal-plot-container[data-file="1"] { grid-area: dist1; }
+        .modal-plot-container[data-file="2"] { grid-area: dist2; }
+
+        .modal-plot-container h4 {
+            margin-top: 0;
+            margin-bottom: 12px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        #modal-colname1, #modal-colname2 {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        /* Increased histogram height back to 150px */
+        .modal-hist-plot {
+            min-height: 150px;
+            background: var(--bg-secondary);
+            border-radius: 6px;
+            margin-bottom: 12px;
+        }
+        
+        /* Reduced text container height to 60px */
+        .modal-plot-container pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 12px;
+            color: var(--text-primary);
+            max-height: 60px;
+            overflow-y: auto;
+            background: var(--bg-secondary);
+            padding: 12px;
+            border-radius: 6px;
+            line-height: 1.4;
+        }
+        
+        /* Responsive layout for modal */
+        @media (max-width: 768px) {
+            .modal-body {
+                grid-template-columns: 1fr;
+                grid-template-areas:
+                    "image"
+                    "dist1"
+                    "dist2";
+            }
+            .modal-content {
+                margin: 5% auto;
+            }
+            .modal-image-container img {
+                height: 350px;
+            }
+        }
     </style>
 </head>
 <body>
     <header>
         <h1>📈 CSV相関・分布分析</h1>
-        <a href="index.html" class="header-link">← 差分チェッカーへ</a>
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <button id="clearStorageButton" class="header-link" style="background: linear-gradient(135deg, var(--error) 0%, #dc2626 100%); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3); padding: 10px 20px; font-size: 13px;">🗑️ データクリア</button>
+            <a href="index.html" class="header-link">← 差分チェッカーへ</a>
+        </div>
     </header>
 
     <div id="main-container">
@@ -380,6 +523,8 @@
                 <select id="targetCol2"></select>
             </div>
         </div>
+        
+        <!-- Removed label CSV file input - now auto-loads from cifar10_labels.csv -->
         
         <button id="analyzeButton">🔍 分析を実行</button>
         
@@ -409,13 +554,51 @@
         </div>
     </div>
 
+    <div id="detailsModal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close">&times;</span>
+            <h3 id="modal-title">Index: </h3>
+            <div class="modal-body">
+                
+                <div class="modal-image-container">
+                    <h4>画像 (CIFAR-10)</h4>
+                    <img id="modal-image" src="/placeholder.svg" alt="Index Image" />
+                </div>
+                
+                <div class="modal-plot-container" data-file="1">
+                    <h4>File 1: <span id="modal-colname1"></span></h4>
+                    <div id="modal-hist1" class="modal-hist-plot"></div>
+                    <pre id="modal-dist-text1"></pre>
+                </div>
+                
+                <div class="modal-plot-container" data-file="2">
+                    <h4>File 2: <span id="modal-colname2"></span></h4>
+                    <div id="modal-hist2" class="modal-hist-plot"></div>
+                    <pre id="modal-dist-text2"></pre>
+                </div>
+
+            </div>
+        </div>
+    </div>
     <script>
+        const CIFAR10_CLASSES = [
+            'airplane', 'automobile', 'bird', 'cat', 'deer',
+            'dog', 'frog', 'horse', 'ship', 'truck'
+        ];
+
         let data1 = null;
         let data2 = null;
         let isAxisSwapped = false;
+        
+        let labelMap = new Map();
+        
         let currentValues1 = [];
         let currentValues2 = [];
+        let currentRawValues1 = [];
+        let currentRawValues2 = [];
         let currentLabels = [];
+        let currentGroundTruthLabels = [];
+        
         let currentColName1 = '';
         let currentColName2 = '';
 
@@ -427,7 +610,9 @@
         const indexCol2 = document.getElementById('indexCol2');
         const targetCol2 = document.getElementById('targetCol2');
         
+        
         const analyzeButton = document.getElementById('analyzeButton');
+        const clearStorageButton = document.getElementById('clearStorageButton');
         
         const errorContainer = document.getElementById('error-container');
         const errorDetails = document.getElementById('error-details');
@@ -437,6 +622,97 @@
         
         const pearsonVal = document.getElementById('pearson-value');
         const spearmanVal = document.getElementById('spearman-value');
+        
+        const modal = document.getElementById('detailsModal');
+
+        function saveToLocalStorage() {
+            if (!data1 || !data2) return;
+            
+            const storageData = {
+                data1: data1,
+                data2: data2,
+                indexCol1: indexCol1.value,
+                targetCol1: targetCol1.value,
+                indexCol2: indexCol2.value,
+                targetCol2: targetCol2.value,
+                labelMap: Array.from(labelMap.entries()),
+                timestamp: new Date().toISOString()
+            };
+            
+            try {
+                localStorage.setItem('csvAnalysisData', JSON.stringify(storageData));
+                console.log('[v0] Data saved to localStorage');
+            } catch (e) {
+                console.error('[v0] Failed to save to localStorage:', e);
+            }
+        }
+
+        function loadFromLocalStorage() {
+            try {
+                const stored = localStorage.getItem('csvAnalysisData');
+                if (!stored) return false;
+                
+                const storageData = JSON.parse(stored);
+                
+                data1 = storageData.data1;
+                data2 = storageData.data2;
+                
+                if (storageData.labelMap) {
+                    labelMap = new Map(storageData.labelMap);
+                }
+                
+                populateSelectOptions(data1, indexCol1, targetCol1);
+                populateSelectOptions(data2, indexCol2, targetCol2);
+                
+                indexCol1.value = storageData.indexCol1;
+                targetCol1.value = storageData.targetCol1;
+                indexCol2.value = storageData.indexCol2;
+                targetCol2.value = storageData.targetCol2;
+                
+                const date = new Date(storageData.timestamp);
+                showSuccess(`✅ 保存されたデータを読み込みました（${date.toLocaleString('ja-JP')}）`);
+                
+                console.log('[v0] Data loaded from localStorage');
+                return true;
+            } catch (e) {
+                console.error('[v0] Failed to load from localStorage:', e);
+                return false;
+            }
+        }
+
+        function populateSelectOptions(data, indexSelect, targetSelect) {
+            if (!data || data.length === 0) return;
+            
+            const headers = Object.keys(data[0]);
+            
+            indexSelect.innerHTML = '';
+            targetSelect.innerHTML = '';
+            
+            headers.forEach(header => {
+                if (header) {
+                    const option1 = new Option(header, header);
+                    const option2 = new Option(header, header);
+                    indexSelect.add(option1);
+                    targetSelect.add(option2);
+                }
+            });
+        }
+
+        function clearLocalStorage() {
+            localStorage.removeItem('csvAnalysisData');
+            location.reload();
+        }
+
+        clearStorageButton.addEventListener('click', () => {
+            if (confirm('保存されたデータをクリアしますか？')) {
+                clearLocalStorage();
+            }
+        });
+
+        window.addEventListener('DOMContentLoaded', () => {
+            loadFromLocalStorage();
+            loadLabelCSV();
+        });
 
         csvFile1.addEventListener('change', (e) => {
             handleFileSelect(e.target.files[0], 1, indexCol1, targetCol1);
@@ -446,40 +722,31 @@
             handleFileSelect(e.target.files[0], 2, indexCol2, targetCol2);
         });
         
+        
         analyzeButton.addEventListener('click', runAnalysis);
 
         function calculateSpearman_AverageRank(x, y) {
-            // 1. [value, original_index] のペアを作成
             const xPairs = x.map((value, index) => [value, index]);
             const yPairs = y.map((value, index) => [value, index]);
 
-            // 2. 値でソート
             xPairs.sort((a, b) => a[0] - b[0]);
             yPairs.sort((a, b) => a[0] - b[0]);
 
-            // 3. ランク配列を作成 (元のインデックスの場所に対応するランクを入れる)
             const xRanks = new Array(x.length);
             const yRanks = new Array(y.length);
-
-            // 4. 同順位（Ties）を平均ランクで処理
             
-            // xRanksの処理
             for (let i = 0; i < xPairs.length;) {
                 let j = i;
-                // 同じ値が続く限りjを増やす
                 while (j < xPairs.length - 1 && xPairs[j][0] === xPairs[j + 1][0]) {
                     j++;
                 }
-                
-                // i から j までが同順位
-                const rank = (i + 1 + j + 1) / 2; // 平均ランク (例: 1位と2位なら (1+2)/2 = 1.5)
+                const rank = (i + 1 + j + 1) / 2; 
                 for (let k = i; k <= j; k++) {
-                    xRanks[xPairs[k][1]] = rank; // 元のインデックス位置にランクを格納
+                    xRanks[xPairs[k][1]] = rank; 
                 }
                 i = j + 1;
             }
 
-            // yRanksの処理
             for (let i = 0; i < yPairs.length;) {
                 let j = i;
                 while (j < yPairs.length - 1 && yPairs[j][0] === yPairs[j + 1][0]) {
@@ -492,7 +759,6 @@
                 i = j + 1;
             }
 
-            // 5. ランク配列に対してピアソン相関 (ss.sampleCorrelation) を計算
             return ss.sampleCorrelation(xRanks, yRanks);
         }
 
@@ -545,6 +811,10 @@
                         indexSelect.innerHTML = '<option value="">読込失敗</option>';
                         targetSelect.innerHTML = '<option value="">読込失敗</option>';
                     }
+                    
+                    if (data1 && data2) {
+                        saveToLocalStorage();
+                    }
                 },
                 error: (err) => {
                     alert(`ファイル${fileNum}の読み込みに失敗しました: ${err.message}`);
@@ -552,6 +822,52 @@
                     targetSelect.innerHTML = '<option value="">読込失敗</option>';
                 }
             });
+        }
+
+        function loadLabelCSV() {
+            fetch('cifar10_labels.csv')
+                .then(response => {
+                    if (!response.ok) {
+                        console.log('[v0] Label CSV file not found, continuing without labels');
+                        return null;
+                    }
+                    return response.text();
+                })
+                .then(csvText => {
+                    if (!csvText) return;
+                    
+                    Papa.parse(csvText, {
+                        header: true,
+                        skipEmptyLines: true,
+                        complete: (results) => {
+                            const data = results.data;
+                            const headers = results.meta.fields;
+                            
+                            if (!headers.includes('index') || !headers.includes('label_name')) {
+                                console.warn('[v0] Label CSV does not have required columns (index, label_name)');
+                                return;
+                            }
+                            
+                            labelMap.clear();
+                            
+                            data.forEach(row => {
+                                if (row.index && row.label_name) {
+                                    labelMap.set(row.index, row.label_name);
+                                }
+                            });
+                            
+                            console.log(`[v0] Loaded ${labelMap.size} labels from cifar10_labels.csv`);
+                            showSuccess(`✅ ラベルCSVを読み込みました（${labelMap.size}件）`);
+                            saveToLocalStorage();
+                        },
+                        error: (err) => {
+                            console.error('[v0] Error parsing label CSV:', err);
+                        }
+                    });
+                })
+                .catch(err => {
+                    console.log('[v0] Could not load label CSV file:', err.message);
+                });
         }
 
         function runAnalysis() {
@@ -577,6 +893,8 @@
                 resetButton();
                 return;
             }
+            
+            saveToLocalStorage();
 
             const map1 = new Map();
             const map2 = new Map();
@@ -621,6 +939,9 @@
             const values1 = [];
             const values2 = [];
             const labels = [];
+            const rawValues1 = []; 
+            const rawValues2 = []; 
+            
             let conversionErrors = 0;
 
             function cleanAndParseFloat(str, colName) {
@@ -679,6 +1000,8 @@
                     values1.push(val1);
                     values2.push(val2);
                     labels.push(key);
+                    rawValues1.push(rawVal1);
+                    rawValues2.push(rawVal2);
                 }
             }
 
@@ -688,12 +1011,34 @@
                 return;
             }
             
+            const groundTruthLabels = [];
+            const hasLabelColumn = data1.length > 0 && data1[0].hasOwnProperty('label');
+            
+            if (hasLabelColumn) {
+                for (const key of labels) {
+                    const row = data1.find(r => r[idxColName1] === key);
+                    if (row && row['label'] !== undefined) {
+                        const labelValue = parseInt(row['label']);
+                        if (!isNaN(labelValue) && labelValue >= 0 && labelValue < CIFAR10_CLASSES.length) {
+                            groundTruthLabels.push(CIFAR10_CLASSES[labelValue]);
+                        } else {
+                            groundTruthLabels.push(row['label']);
+                        }
+                    } else {
+                        groundTruthLabels.push('N/A');
+                    }
+                }
+            }
+            
             currentValues1 = values1;
             currentValues2 = values2;
+            currentRawValues1 = rawValues1;
+            currentRawValues2 = rawValues2;
             currentLabels = labels;
+            currentGroundTruthLabels = groundTruthLabels;
             currentColName1 = tgtColName1;
             currentColName2 = tgtColName2;
-            
+
             try {
                 const pearson = ss.sampleCorrelation(values1, values2).toFixed(4);
                 const spearman = calculateSpearman_AverageRank(values1, values2).toFixed(4); 
@@ -749,7 +1094,7 @@
                 };
                 Plotly.newPlot('hist2', [traceHist2], layoutHist2, {responsive: true});
 
-                drawScatterPlot();
+                drawScatterPlot(); 
 
                 plotsContainer.style.display = 'grid';
 
@@ -813,7 +1158,15 @@
                 font: { color: '#94a3b8' }
             };
             
-            Plotly.newPlot('scatter', [traceScatter], layoutScatter, {responsive: true});
+            Plotly.newPlot('scatter', [traceScatter], layoutScatter, {responsive: true})
+                .then(gd => {
+                    gd.on('plotly_click', (data) => {
+                        if (data.points.length > 0) {
+                            const pointIndex = data.points[0].pointNumber;
+                            showDetailsModal(pointIndex);
+                        }
+                    });
+                });
         }
         
         function swapAxes() {
@@ -839,6 +1192,10 @@
             Plotly.purge('hist1');
             Plotly.purge('hist2');
             Plotly.purge('scatter');
+            Plotly.purge('modal-hist1');
+            Plotly.purge('modal-hist2');
+            
+            modal.style.display = 'none';
             
             const swapButton = document.getElementById('swapAxisButton');
             if (swapButton) {
@@ -859,6 +1216,131 @@
         function showSuccess(message) {
             successContainer.textContent = message;
             successContainer.style.display = 'block';
+        }
+
+        const modalClose = document.getElementsByClassName('modal-close')[0];
+
+        modalClose.onclick = () => {
+            modal.style.display = "none";
+        }
+        window.onclick = (event) => {
+            if (event.target == modal) {
+                modal.style.display = "none";
+            }
+        }
+        
+        function showDetailsModal(pointIndex) {
+            const indexLabel = currentLabels[pointIndex];
+            const rawVal1 = currentRawValues1[pointIndex];
+            const rawVal2 = currentRawValues2[pointIndex];
+            
+            let titleText = `Index: ${indexLabel}`;
+            
+            if (labelMap.has(indexLabel)) {
+                titleText += ` | Label: ${labelMap.get(indexLabel)}`;
+            } else {
+                const labelIndex = parseInt(indexLabel);
+                if (!isNaN(labelIndex) && labelIndex >= 0 && labelIndex < CIFAR10_CLASSES.length) {
+                    titleText += ` | Label: ${CIFAR10_CLASSES[labelIndex]}`;
+                } else if (currentGroundTruthLabels.length > 0 && currentGroundTruthLabels[pointIndex]) {
+                    titleText += ` | Label: ${currentGroundTruthLabels[pointIndex]}`;
+                }
+            }
+            
+            document.getElementById('modal-title').textContent = titleText;
+
+            document.getElementById('modal-colname1').textContent = currentColName1;
+            document.getElementById('modal-colname2').textContent = currentColName2;
+            
+            const imgElement = document.getElementById('modal-image');
+            imgElement.src = `images/${indexLabel}.png`;
+            imgElement.style.display = 'block';
+            imgElement.onerror = () => { 
+                imgElement.alt = `画像が見つかりません: images/${indexLabel}.png`;
+            };
+            
+            const data1 = parseAndFormatDistribution(rawVal1);
+            document.getElementById('modal-dist-text1').textContent = data1.text;
+            
+            const data2 = parseAndFormatDistribution(rawVal2);
+            document.getElementById('modal-dist-text2').textContent = data2.text;
+
+            const histLayout = {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(17, 24, 39, 0.8)',
+                font: { color: '#94a3b8' },
+                margin: { l: 40, r: 20, b: 60, t: 20 },
+                xaxis: { 
+                    title: 'Class Name', 
+                    color: '#94a3b8', 
+                    gridcolor: 'var(--border)',
+                    tickangle: -45
+                },
+                yaxis: { title: 'Count', color: '#94a3b8', gridcolor: 'var(--border)' },
+                height: 150
+            };
+
+            const histConfig = { responsive: true, displayModeBar: false };
+
+            if (data1.counts.length > 0) {
+                const traceHist1 = {
+                    x: CIFAR10_CLASSES.slice(0, data1.counts.length),
+                    y: data1.counts,
+                    type: 'bar',
+                    marker: { color: '#3b82f6' }
+                };
+                let layout1 = JSON.parse(JSON.stringify(histLayout)); 
+                Plotly.newPlot('modal-hist1', [traceHist1], layout1, histConfig);
+            } else {
+                Plotly.purge('modal-hist1');
+                document.getElementById('modal-hist1').innerHTML = `<div style="display:flex; align-items:center; justify-content:center; height: 100%; color: var(--text-muted);">分布データなし</div>`;
+            }
+
+            if (data2.counts.length > 0) {
+                const traceHist2 = {
+                    x: CIFAR10_CLASSES.slice(0, data2.counts.length),
+                    y: data2.counts,
+                    type: 'bar',
+                    marker: { color: '#10b981' }
+                };
+                let layout2 = JSON.parse(JSON.stringify(histLayout));
+                Plotly.newPlot('modal-hist2', [traceHist2], layout2, histConfig);
+            } else {
+                Plotly.purge('modal-hist2');
+                document.getElementById('modal-hist2').innerHTML = `<div style="display:flex; align-items:center; justify-content:center; height: 100%; color: var(--text-muted);">分布データなし</div>`;
+            }
+
+            modal.style.display = 'block';
+        }
+
+        function parseAndFormatDistribution(rawValue) {
+            if (typeof rawValue === 'string' && rawValue.startsWith('[') && rawValue.endsWith(']')) {
+                try {
+                    const arrStr = rawValue.substring(1, rawValue.length - 1);
+                    const counts = arrStr.split(',').map(s => parseFloat(s.trim()) || 0);
+                    const total = counts.reduce((sum, val) => sum + val, 0);
+                    
+                    let textOutput = "分布 (カウント(確率%)):\n";
+                    let distArray = [];
+
+                    if (total === 0) {
+                         textOutput += "全ての値がゼロです。";
+                    } else {
+                        counts.forEach((count, i) => {
+                            const p = (count / total) * 100;
+                            distArray.push(`${count}(${p.toFixed(1)}%)`);
+                        });
+                        textOutput += `[${distArray.join(', ')}]`;
+                    }
+                    
+                    return { counts: counts, text: textOutput };
+
+                } catch (e) {
+                    return { counts: [], text: `分布の解析エラー:\n${rawValue}` };
+                }
+            }
+            
+            return { counts: [], text: `元の値:\n${rawValue}` };
         }
 
     </script>

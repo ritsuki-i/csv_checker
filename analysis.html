@@ -331,7 +331,6 @@
             cursor: pointer;
             transition: all 0.3s ease;
             box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-            margin-bottom: 16px;
         }
 
         .swap-button:hover {
@@ -339,11 +338,75 @@
             box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
         }
 
+        /* Added mode button styles */
+        .mode-button {
+            padding: 10px 20px;
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .mode-button:hover {
+            border-color: var(--accent);
+            color: var(--text-primary);
+            background: var(--accent-light);
+        }
+
+        .mode-button.active {
+            background: linear-gradient(135deg, var(--accent) 0%, #6366f1 100%);
+            color: white;
+            border-color: var(--accent);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+
         .scatter-controls {
             display: flex;
             justify-content: center;
             margin-bottom: 16px;
         }
+
+        /* Added legend styles for correctness mode */
+        .correctness-legend {
+            display: none;
+            margin-top: 16px;
+            padding: 16px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .correctness-legend.visible {
+            display: block;
+        }
+
+        .legend-items {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+
 
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
@@ -551,6 +614,29 @@
                 <div id="hist2" class="plot-box"></div>
                 <div id="scatter" class="plot-box"></div>
             </div>
+            
+            <!-- Added correctness legend -->
+            <div id="correctnessLegend" class="correctness-legend">
+                <h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 16px;">正解判定の凡例</h4>
+                <div class="legend-items">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #10b981;"></div>
+                        <span>両者正解</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #3b82f6;"></div>
+                        <span>1のみ正解</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #f59e0b;"></div>
+                        <span>2のみ正解</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #ef4444;"></div>
+                        <span>両者不正解</span>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -591,6 +677,9 @@
         let isAxisSwapped = false;
         
         let labelMap = new Map();
+        let euProxyMap = new Map();
+        
+        let scatterDisplayMode = 'normal'; // 'normal', 'heatmap', 'correctness'
         
         let currentValues1 = [];
         let currentValues2 = [];
@@ -636,6 +725,7 @@
                 indexCol2: indexCol2.value,
                 targetCol2: targetCol2.value,
                 labelMap: Array.from(labelMap.entries()),
+                euProxyMap: Array.from(euProxyMap.entries()), // Save EU proxy map
                 timestamp: new Date().toISOString()
             };
             
@@ -659,6 +749,10 @@
                 
                 if (storageData.labelMap) {
                     labelMap = new Map(storageData.labelMap);
+                }
+                // Load EU proxy map
+                if (storageData.euProxyMap) {
+                    euProxyMap = new Map(storageData.euProxyMap);
                 }
                 
                 populateSelectOptions(data1, indexCol1, targetCol1);
@@ -712,6 +806,7 @@
         window.addEventListener('DOMContentLoaded', () => {
             loadFromLocalStorage();
             loadLabelCSV();
+            loadEuProxyCSV();
         });
 
         csvFile1.addEventListener('change', (e) => {
@@ -867,6 +962,50 @@
                 })
                 .catch(err => {
                     console.log('[v0] Could not load label CSV file:', err.message);
+                });
+        }
+
+        function loadEuProxyCSV() {
+            fetch('eu_proxy.csv')
+                .then(response => {
+                    if (!response.ok) {
+                        console.log('[v0] EU proxy CSV file not found, continuing without EU proxy data');
+                        return null;
+                    }
+                    return response.text();
+                })
+                .then(csvText => {
+                    if (!csvText) return;
+                    
+                    Papa.parse(csvText, {
+                        header: true,
+                        skipEmptyLines: true,
+                        complete: (results) => {
+                            const data = results.data;
+                            const headers = results.meta.fields;
+                            
+                            if (!headers.includes('index') || !headers.includes('eu_proxy')) {
+                                console.warn('[v0] EU proxy CSV does not have required columns (index, eu_proxy)');
+                                return;
+                            }
+                            
+                            euProxyMap.clear();
+                            
+                            data.forEach(row => {
+                                if (row.index && row.eu_proxy) {
+                                    euProxyMap.set(row.index, parseFloat(row.eu_proxy));
+                                }
+                            });
+                            
+                            console.log(`[v0] Loaded ${euProxyMap.size} EU proxy values from eu_proxy.csv`);
+                        },
+                        error: (err) => {
+                            console.error('[v0] Error parsing EU proxy CSV:', err);
+                        }
+                    });
+                })
+                .catch(err => {
+                    console.log('[v0] Could not load EU proxy CSV file:', err.message);
                 });
         }
 
@@ -1108,12 +1247,23 @@
         function drawScatterPlot() {
             const scatterDiv = document.getElementById('scatter');
             
-            if (!document.getElementById('swapAxisButton')) {
+            if (!document.getElementById('displayModeButtons')) {
                 const controlsDiv = document.createElement('div');
                 controlsDiv.className = 'scatter-controls';
-                controlsDiv.innerHTML = '<button id="swapAxisButton" class="swap-button">🔄 X軸とY軸を入れ替え</button>';
+                controlsDiv.id = 'displayModeButtons';
+                controlsDiv.innerHTML = `
+                    <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 16px;">
+                        <button id="modeNormal" class="mode-button active">通常</button>
+                        <button id="modeHeatmap" class="mode-button">ヒートマップ</button>
+                        <button id="modeCorrectness" class="mode-button">正解判定</button>
+                        <button id="swapAxisButton" class="swap-button">🔄 軸入れ替え</button>
+                    </div>
+                `;
                 scatterDiv.insertBefore(controlsDiv, scatterDiv.firstChild);
                 
+                document.getElementById('modeNormal').addEventListener('click', () => changeDisplayMode('normal'));
+                document.getElementById('modeHeatmap').addEventListener('click', () => changeDisplayMode('heatmap'));
+                document.getElementById('modeCorrectness').addEventListener('click', () => changeDisplayMode('correctness'));
                 document.getElementById('swapAxisButton').addEventListener('click', swapAxes);
             }
             
@@ -1130,13 +1280,66 @@
             const xFile = isAxisSwapped ? 'File 2' : 'File 1';
             const yFile = isAxisSwapped ? 'File 1' : 'File 2';
             
+            let colors = [];
+            let colorscale = null;
+            let showscale = false;
+            let hoverText = [];
+            
+            if (scatterDisplayMode === 'normal') {
+                colors = '#8b5cf6';
+                hoverText = currentLabels.map((label, i) => 
+                    `Index: ${label}<br>X: ${xData[i].toFixed(4)}<br>Y: ${yData[i].toFixed(4)}`
+                );
+            } else if (scatterDisplayMode === 'heatmap') {
+                // EU proxy heatmap
+                colors = currentLabels.map(label => {
+                    const euValue = euProxyMap.get(label);
+                    return euValue !== undefined ? euValue : 0;
+                });
+                colorscale = 'Viridis';
+                showscale = true;
+                hoverText = currentLabels.map((label, i) => {
+                    const euValue = euProxyMap.get(label);
+                    const euText = euValue !== undefined ? euValue.toFixed(4) : 'N/A';
+                    return `Index: ${label}<br>X: ${xData[i].toFixed(4)}<br>Y: ${yData[i].toFixed(4)}<br>EU Proxy: ${euText}`;
+                });
+            } else if (scatterDisplayMode === 'correctness') {
+                // Correctness coloring
+                const correctnessData = currentLabels.map((label, i) => {
+                    const correct1 = isLabelCorrect(currentRawValues1[i], label);
+                    const correct2 = isLabelCorrect(currentRawValues2[i], label);
+                    
+                    if (correct1 && correct2) return { color: '#10b981', text: '両者正解' };
+                    if (correct1 && !correct2) return { color: '#3b82f6', text: '1のみ正解' };
+                    if (!correct1 && correct2) return { color: '#f59e0b', text: '2のみ正解' };
+                    return { color: '#ef4444', text: '両者不正解' };
+                });
+                
+                colors = correctnessData.map(d => d.color);
+                hoverText = currentLabels.map((label, i) => 
+                    `Index: ${label}<br>X: ${xData[i].toFixed(4)}<br>Y: ${yData[i].toFixed(4)}<br>判定: ${correctnessData[i].text}`
+                );
+            }
+            
             const traceScatter = {
                 x: xData,
                 y: yData,
-                text: currentLabels,
+                text: hoverText,
                 mode: 'markers',
                 type: 'scatter',
-                marker: { color: '#8b5cf6', size: 8, opacity: 0.7 }
+                hovertemplate: '%{text}<extra></extra>',
+                marker: { 
+                    color: colors,
+                    size: 8,
+                    opacity: 0.7,
+                    colorscale: colorscale,
+                    showscale: showscale,
+                    colorbar: showscale ? {
+                        title: 'EU Proxy',
+                        titlefont: { color: '#94a3b8' },
+                        tickfont: { color: '#94a3b8' }
+                    } : undefined
+                }
             };
             
             const layoutScatter = {
@@ -1169,11 +1372,64 @@
                 });
         }
         
+        function changeDisplayMode(mode) {
+            scatterDisplayMode = mode;
+            
+            // Update button styles
+            document.querySelectorAll('.mode-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.getElementById(`mode${mode.charAt(0).toUpperCase() + mode.slice(1)}`).classList.add('active');
+            
+            const legend = document.getElementById('correctnessLegend');
+            if (mode === 'correctness') {
+                legend.classList.add('visible');
+            } else {
+                legend.classList.remove('visible');
+            }
+            
+            drawScatterPlot();
+        }
+        
+        function isLabelCorrect(rawValue, indexLabel) {
+            // Parse distribution array from raw value
+            if (typeof rawValue !== 'string' || !rawValue.startsWith('[') || !rawValue.endsWith(']')) {
+                return false;
+            }
+            
+            try {
+                const arrStr = rawValue.substring(1, rawValue.length - 1);
+                const counts = arrStr.split(',').map(s => parseFloat(s.trim()) || 0);
+                
+                // Find max probability index
+                let maxIndex = 0;
+                let maxValue = counts[0];
+                for (let i = 1; i < counts.length; i++) {
+                    if (counts[i] > maxValue) {
+                        maxValue = counts[i];
+                        maxIndex = i;
+                    }
+                }
+                
+                // Get ground truth label
+                const groundTruthLabel = labelMap.get(indexLabel);
+                if (!groundTruthLabel) return false;
+                
+                // Get ground truth index
+                const groundTruthIndex = CIFAR10_CLASSES.indexOf(groundTruthLabel);
+                if (groundTruthIndex === -1) return false;
+                
+                return maxIndex === groundTruthIndex;
+            } catch (e) {
+                return false;
+            }
+        }
+        
         function swapAxes() {
             isAxisSwapped = !isAxisSwapped;
             drawScatterPlot();
         }
-        
+
         window.addEventListener('resize', () => {
             if (currentValues1.length > 0) {
                 drawScatterPlot();
@@ -1197,9 +1453,15 @@
             
             modal.style.display = 'none';
             
-            const swapButton = document.getElementById('swapAxisButton');
-            if (swapButton) {
-                swapButton.parentElement.remove();
+            const displayModeButtons = document.getElementById('displayModeButtons');
+            if (displayModeButtons) {
+                displayModeButtons.remove();
+            }
+            
+            // Hide correctness legend
+            const legend = document.getElementById('correctnessLegend');
+            if (legend) {
+                legend.classList.remove('visible');
             }
         }
 

@@ -991,9 +991,10 @@
         });
 
         window.addEventListener('DOMContentLoaded', () => {
-            loadFromLocalStorage();
-            loadLabelCSV();
-            loadEuProxyCSV();
+            if (!loadFromLocalStorage()) { // Only load CSVs if localStorage failed or was empty
+                loadLabelCSV();
+                loadEuProxyCSV();
+            }
         });
 
         csvFile1.addEventListener('change', (e) => {
@@ -1636,6 +1637,34 @@
             }
         }
         
+        // Function to calculate entropy - ADDED
+        function calculateEntropy(rawValue) {
+            if (typeof rawValue !== 'string' || !rawValue.startsWith('[') || !rawValue.endsWith(']')) {
+                return NaN;
+            }
+            
+            try {
+                const arrStr = rawValue.substring(1, rawValue.length - 1);
+                const counts = arrStr.split(',').map(s => parseFloat(s.trim()) || 0);
+                
+                const total = counts.reduce((sum, val) => sum + val, 0);
+                if (total === 0) {
+                    return 0;
+                }
+                
+                let entropy = 0;
+                for (const count of counts) {
+                    if (count > 0) {
+                        const p = count / total;
+                        entropy -= p * Math.log2(p);
+                    }
+                }
+                return entropy;
+            } catch (e) {
+                return NaN;
+            }
+        }
+
         function showDetailsModal(pointIndex) {
             const indexLabel = currentLabels[pointIndex];
             const rawVal1 = currentRawValues1[pointIndex];
@@ -1685,7 +1714,6 @@
             if (euProxyMap.has(indexLabel)) {
                 const euValue = euProxyMap.get(indexLabel);
                 
-                // Calculate percentile
                 const allEuValues = Array.from(euProxyMap.values()).sort((a, b) => b - a);
                 const rank = allEuValues.findIndex(v => v <= euValue) + 1;
                 const percentile = (rank / allEuValues.length * 100).toFixed(1);
@@ -1703,7 +1731,53 @@
                 `;
             }
             
-            modalInfo.innerHTML = correctnessHTML + euPercentileHTML;
+            const entropy1 = calculateEntropy(rawVal1);
+            const entropy2 = calculateEntropy(rawVal2);
+            
+            let entropy1HTML = '';
+            let entropy2HTML = '';
+            
+            if (!isNaN(entropy1)) {
+                // Calculate all entropy values for CSV1
+                const allEntropy1 = currentRawValues1.map(rv => calculateEntropy(rv)).filter(e => !isNaN(e));
+                allEntropy1.sort((a, b) => b - a);
+                const rank1 = allEntropy1.findIndex(e => e <= entropy1) + 1;
+                const percentile1 = (rank1 / allEntropy1.length * 100).toFixed(1);
+                
+                entropy1HTML = `
+                    <div class="modal-info-item">
+                        <div class="modal-info-label">${file1Label} Entropy</div>
+                        <div class="modal-info-value">
+                            ${entropy1.toFixed(4)}
+                            <span style="font-size: 14px; color: var(--text-secondary); margin-left: 8px;">
+                                (上位 ${percentile1}%)
+                            </span>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            if (!isNaN(entropy2)) {
+                // Calculate all entropy values for CSV2
+                const allEntropy2 = currentRawValues2.map(rv => calculateEntropy(rv)).filter(e => !isNaN(e));
+                allEntropy2.sort((a, b) => b - a);
+                const rank2 = allEntropy2.findIndex(e => e <= entropy2) + 1;
+                const percentile2 = (rank2 / allEntropy2.length * 100).toFixed(1);
+                
+                entropy2HTML = `
+                    <div class="modal-info-item">
+                        <div class="modal-info-label">${file2Label} Entropy</div>
+                        <div class="modal-info-value">
+                            ${entropy2.toFixed(4)}
+                            <span style="font-size: 14px; color: var(--text-secondary); margin-left: 8px;">
+                                (上位 ${percentile2}%)
+                            </span>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            modalInfo.innerHTML = correctnessHTML + euPercentileHTML + entropy1HTML + entropy2HTML;
 
             document.getElementById('modal-colname1').textContent = currentColName1;
             document.getElementById('modal-colname2').textContent = currentColName2;

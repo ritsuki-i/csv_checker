@@ -139,6 +139,88 @@
             margin-bottom: 20px;
         }
 
+        /* Hide default file input and create custom file selector */
+        input[type="file"] {
+            display: none;
+        }
+
+        .custom-file-selector {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .custom-file-button {
+            width: 100%;
+            padding: 12px 16px;
+            background: linear-gradient(135deg, var(--accent) 0%, #6366f1 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+
+        .custom-file-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+        }
+
+        /* Updated file name display to support remove button */
+        .file-name-display {
+            margin-top: 0;
+            padding: 12px 16px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 13px;
+            color: var(--text-muted);
+            word-break: break-all;
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .file-name-display.selected {
+            color: var(--text-primary);
+            border-color: var(--accent);
+            background: var(--accent-light);
+            font-weight: 600;
+        }
+        
+        /* Added file name text wrapper */
+        .file-name-text {
+            flex: 1;
+        }
+        
+        /* Added remove button styles */
+        .file-remove-button {
+            background: var(--error);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+        
+        .file-remove-button:hover {
+            background: #dc2626;
+            transform: scale(1.1);
+        }
+
         label {
             font-weight: 600;
             display: block;
@@ -462,6 +544,64 @@
             word-break: break-all;
         }
         
+        /* Modal info section styles */
+        #modal-info {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        
+        .modal-info-item {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .modal-info-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .modal-info-value {
+            font-size: 16px;
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+        
+        .correctness-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        
+        .correctness-indicator.correct {
+            background: var(--success-light);
+            color: var(--success);
+        }
+        
+        .correctness-indicator.incorrect {
+            background: var(--error-light);
+            color: var(--error);
+        }
+        
+        @media (max-width: 768px) {
+            #modal-info {
+                grid-template-columns: 1fr;
+            }
+        }
+        
         /* Modal body layout - image gets more space (2fr vs 1fr) */
         .modal-body {
             display: grid;
@@ -571,6 +711,16 @@
         <div id="controls-container">
             <div class="control-box">
                 <h3>📁 CSVファイル 1</h3>
+                <!-- Updated file selector with remove button -->
+                <div class="custom-file-selector">
+                    <button type="button" class="custom-file-button" id="file1-button" onclick="document.getElementById('csvFile1').click()">
+                        📂 ファイルを選択
+                    </button>
+                    <div class="file-name-display" id="file1-name">
+                        <span class="file-name-text" id="file1-name-text">選択されていません</span>
+                        <button class="file-remove-button" id="file1-remove" style="display: none;">×</button>
+                    </div>
+                </div>
                 <input type="file" id="csvFile1" accept=".csv">
                 <label for="indexCol1">Index (キー) カラム:</label>
                 <select id="indexCol1"></select>
@@ -579,6 +729,16 @@
             </div>
             <div class="control-box">
                 <h3>📁 CSVファイル 2</h3>
+                <!-- Updated file selector with remove button -->
+                <div class="custom-file-selector">
+                    <button type="button" class="custom-file-button" id="file2-button" onclick="document.getElementById('csvFile2').click()">
+                        📂 ファイルを選択
+                    </button>
+                    <div class="file-name-display" id="file2-name">
+                        <span class="file-name-text" id="file2-name-text">選択されていません</span>
+                        <button class="file-remove-button" id="file2-remove" style="display: none;">×</button>
+                    </div>
+                </div>
                 <input type="file" id="csvFile2" accept=".csv">
                 <label for="indexCol2">Index (キー) カラム:</label>
                 <select id="indexCol2"></select>
@@ -644,6 +804,10 @@
         <div class="modal-content">
             <span class="modal-close">&times;</span>
             <h3 id="modal-title">Index: </h3>
+            
+            <!-- Added modal info section -->
+            <div id="modal-info"></div>
+            
             <div class="modal-body">
                 
                 <div class="modal-image-container">
@@ -679,7 +843,7 @@
         let labelMap = new Map();
         let euProxyMap = new Map();
         
-        let scatterDisplayMode = 'normal'; // 'normal', 'heatmap', 'correctness'
+        let scatterDisplayMode = 'normal';
         
         let currentValues1 = [];
         let currentValues2 = [];
@@ -690,15 +854,25 @@
         
         let currentColName1 = '';
         let currentColName2 = '';
+        
+        let csv1FileName = '';
+        let csv2FileName = '';
 
         const csvFile1 = document.getElementById('csvFile1');
         const indexCol1 = document.getElementById('indexCol1');
         const targetCol1 = document.getElementById('targetCol1');
+        const file1NameDisplay = document.getElementById('file1-name');
+        const file1NameText = document.getElementById('file1-name-text');
+        const file1Button = document.getElementById('file1-button');
+        const file1RemoveButton = document.getElementById('file1-remove');
         
         const csvFile2 = document.getElementById('csvFile2');
         const indexCol2 = document.getElementById('indexCol2');
         const targetCol2 = document.getElementById('targetCol2');
-        
+        const file2NameDisplay = document.getElementById('file2-name');
+        const file2NameText = document.getElementById('file2-name-text');
+        const file2Button = document.getElementById('file2-button');
+        const file2RemoveButton = document.getElementById('file2-remove');
         
         const analyzeButton = document.getElementById('analyzeButton');
         const clearStorageButton = document.getElementById('clearStorageButton');
@@ -714,6 +888,9 @@
         
         const modal = document.getElementById('detailsModal');
 
+        file1RemoveButton.addEventListener('click', () => removeFile(1));
+        file2RemoveButton.addEventListener('click', () => removeFile(2));
+
         function saveToLocalStorage() {
             if (!data1 || !data2) return;
             
@@ -725,7 +902,9 @@
                 indexCol2: indexCol2.value,
                 targetCol2: targetCol2.value,
                 labelMap: Array.from(labelMap.entries()),
-                euProxyMap: Array.from(euProxyMap.entries()), // Save EU proxy map
+                euProxyMap: Array.from(euProxyMap.entries()),
+                csv1FileName: csv1FileName,
+                csv2FileName: csv2FileName,
                 timestamp: new Date().toISOString()
             };
             
@@ -750,9 +929,17 @@
                 if (storageData.labelMap) {
                     labelMap = new Map(storageData.labelMap);
                 }
-                // Load EU proxy map
                 if (storageData.euProxyMap) {
                     euProxyMap = new Map(storageData.euProxyMap);
+                }
+                
+                if (storageData.csv1FileName) {
+                    csv1FileName = storageData.csv1FileName;
+                    updateFileUI(1, csv1FileName);
+                }
+                if (storageData.csv2FileName) {
+                    csv2FileName = storageData.csv2FileName;
+                    updateFileUI(2, csv2FileName);
                 }
                 
                 populateSelectOptions(data1, indexCol1, targetCol1);
@@ -860,8 +1047,16 @@
         function handleFileSelect(file, fileNum, indexSelect, targetSelect) {
             if (!file) return;
 
-            if (fileNum === 1) { data1 = null; }
-            if (fileNum === 2) { data2 = null; }
+            if (fileNum === 1) {
+                data1 = null;
+                csv1FileName = file.name;
+                updateFileUI(1, csv1FileName);
+            }
+            if (fileNum === 2) {
+                data2 = null;
+                csv2FileName = file.name;
+                updateFileUI(2, csv2FileName);
+            }
             
             indexSelect.innerHTML = '<option value="">読み込み中...</option>';
             targetSelect.innerHTML = '<option value="">読み込み中...</option>';
@@ -918,95 +1113,45 @@
                 }
             });
         }
-
-        function loadLabelCSV() {
-            fetch('cifar10_labels.csv')
-                .then(response => {
-                    if (!response.ok) {
-                        console.log('[v0] Label CSV file not found, continuing without labels');
-                        return null;
-                    }
-                    return response.text();
-                })
-                .then(csvText => {
-                    if (!csvText) return;
-                    
-                    Papa.parse(csvText, {
-                        header: true,
-                        skipEmptyLines: true,
-                        complete: (results) => {
-                            const data = results.data;
-                            const headers = results.meta.fields;
-                            
-                            if (!headers.includes('index') || !headers.includes('label_name')) {
-                                console.warn('[v0] Label CSV does not have required columns (index, label_name)');
-                                return;
-                            }
-                            
-                            labelMap.clear();
-                            
-                            data.forEach(row => {
-                                if (row.index && row.label_name) {
-                                    labelMap.set(row.index, row.label_name);
-                                }
-                            });
-                            
-                            console.log(`[v0] Loaded ${labelMap.size} labels from cifar10_labels.csv`);
-                            showSuccess(`✅ ラベルCSVを読み込みました（${labelMap.size}件）`);
-                            saveToLocalStorage();
-                        },
-                        error: (err) => {
-                            console.error('[v0] Error parsing label CSV:', err);
-                        }
-                    });
-                })
-                .catch(err => {
-                    console.log('[v0] Could not load label CSV file:', err.message);
-                });
+        
+        function updateFileUI(fileNum, fileName) {
+            if (fileNum === 1) {
+                file1NameText.textContent = fileName;
+                file1NameDisplay.classList.add('selected');
+                file1Button.style.display = 'none';
+                file1RemoveButton.style.display = 'flex';
+            } else {
+                file2NameText.textContent = fileName;
+                file2NameDisplay.classList.add('selected');
+                file2Button.style.display = 'none';
+                file2RemoveButton.style.display = 'flex';
+            }
         }
-
-        function loadEuProxyCSV() {
-            fetch('eu_proxy.csv')
-                .then(response => {
-                    if (!response.ok) {
-                        console.log('[v0] EU proxy CSV file not found, continuing without EU proxy data');
-                        return null;
-                    }
-                    return response.text();
-                })
-                .then(csvText => {
-                    if (!csvText) return;
-                    
-                    Papa.parse(csvText, {
-                        header: true,
-                        skipEmptyLines: true,
-                        complete: (results) => {
-                            const data = results.data;
-                            const headers = results.meta.fields;
-                            
-                            if (!headers.includes('index') || !headers.includes('eu_proxy')) {
-                                console.warn('[v0] EU proxy CSV does not have required columns (index, eu_proxy)');
-                                return;
-                            }
-                            
-                            euProxyMap.clear();
-                            
-                            data.forEach(row => {
-                                if (row.index && row.eu_proxy) {
-                                    euProxyMap.set(row.index, parseFloat(row.eu_proxy));
-                                }
-                            });
-                            
-                            console.log(`[v0] Loaded ${euProxyMap.size} EU proxy values from eu_proxy.csv`);
-                        },
-                        error: (err) => {
-                            console.error('[v0] Error parsing EU proxy CSV:', err);
-                        }
-                    });
-                })
-                .catch(err => {
-                    console.log('[v0] Could not load EU proxy CSV file:', err.message);
-                });
+        
+        function removeFile(fileNum) {
+            if (fileNum === 1) {
+                data1 = null;
+                csv1FileName = '';
+                csvFile1.value = '';
+                file1NameText.textContent = '選択されていません';
+                file1NameDisplay.classList.remove('selected');
+                file1Button.style.display = 'block';
+                file1RemoveButton.style.display = 'none';
+                indexCol1.innerHTML = '';
+                targetCol1.innerHTML = '';
+            } else {
+                data2 = null;
+                csv2FileName = '';
+                csvFile2.value = '';
+                file2NameText.textContent = '選択されていません';
+                file2NameDisplay.classList.remove('selected');
+                file2Button.style.display = 'block';
+                file2RemoveButton.style.display = 'none';
+                indexCol2.innerHTML = '';
+                targetCol2.innerHTML = '';
+            }
+            
+            saveToLocalStorage();
         }
 
         function runAnalysis() {
@@ -1277,8 +1422,8 @@
             const yData = isAxisSwapped ? currentValues1 : currentValues2;
             const xLabel = isAxisSwapped ? currentColName2 : currentColName1;
             const yLabel = isAxisSwapped ? currentColName1 : currentColName2;
-            const xFile = isAxisSwapped ? 'File 2' : 'File 1';
-            const yFile = isAxisSwapped ? 'File 1' : 'File 2';
+            const xFile = isAxisSwapped ? csv2FileName || 'CSV2' : csv1FileName || 'CSV1';
+            const yFile = isAxisSwapped ? csv1FileName || 'CSV1' : csv2FileName || 'CSV2';
             
             let colors = [];
             let colorscale = null;
@@ -1510,6 +1655,55 @@
             }
             
             document.getElementById('modal-title').textContent = titleText;
+            
+            const modalInfo = document.getElementById('modal-info');
+            let infoHTML = '';
+            
+            const correct1 = isLabelCorrect(rawVal1, indexLabel);
+            const correct2 = isLabelCorrect(rawVal2, indexLabel);
+            
+            const file1Label = csv1FileName || 'CSV1';
+            const file2Label = csv2FileName || 'CSV2';
+            
+            const correctnessHTML = `
+                <div class="modal-info-item">
+                    <div class="modal-info-label">正誤判定</div>
+                    <div class="modal-info-value">
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <span class="correctness-indicator ${correct1 ? 'correct' : 'incorrect'}">
+                                ${correct1 ? '✓' : '✗'} ${file1Label}: ${correct1 ? '正解' : '不正解'}
+                            </span>
+                            <span class="correctness-indicator ${correct2 ? 'correct' : 'incorrect'}">
+                                ${correct2 ? '✓' : '✗'} ${file2Label}: ${correct2 ? '正解' : '不正解'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            let euPercentileHTML = '';
+            if (euProxyMap.has(indexLabel)) {
+                const euValue = euProxyMap.get(indexLabel);
+                
+                // Calculate percentile
+                const allEuValues = Array.from(euProxyMap.values()).sort((a, b) => b - a);
+                const rank = allEuValues.findIndex(v => v <= euValue) + 1;
+                const percentile = (rank / allEuValues.length * 100).toFixed(1);
+                
+                euPercentileHTML = `
+                    <div class="modal-info-item">
+                        <div class="modal-info-label">EU Proxy</div>
+                        <div class="modal-info-value">
+                            ${euValue.toFixed(4)}
+                            <span style="font-size: 14px; color: var(--text-secondary); margin-left: 8px;">
+                                (上位 ${percentile}%)
+                            </span>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            modalInfo.innerHTML = correctnessHTML + euPercentileHTML;
 
             document.getElementById('modal-colname1').textContent = currentColName1;
             document.getElementById('modal-colname2').textContent = currentColName2;

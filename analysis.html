@@ -1255,7 +1255,7 @@
                         for (const count of counts) {
                             if (count > 0) {
                                 const p = count / total;
-                                entropy -= p * Math.log2(p);
+                                entropy -= p * Math.log(p);
                             }
                         }
                         return entropy;
@@ -1656,7 +1656,7 @@
                 for (const count of counts) {
                     if (count > 0) {
                         const p = count / total;
-                        entropy -= p * Math.log2(p);
+                        entropy -= p * Math.log(p);
                     }
                 }
                 return entropy;
